@@ -40,6 +40,7 @@ fun DownloadsSettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val tracks by viewModel.downloadedTracks.collectAsStateWithLifecycle()
+    val prefs by viewModel.playbackSettings.collectAsStateWithLifecycle()
     var confirmClear by remember { mutableStateOf(false) }
     var usedBytes by remember { mutableStateOf(0L) }
 
@@ -129,6 +130,22 @@ fun DownloadsSettingsScreen(
 
         HorizontalDivider(color = AppColors.SurfaceVariant)
 
+        ToggleRow(
+            title = "Download over Wi-Fi only",
+            subtitle = "Queued downloads wait for an unmetered connection",
+            checked = prefs.downloadOverWifiOnly,
+            onChange = viewModel::setWifiOnlyDownloads
+        )
+
+        ToggleRow(
+            title = "Smart downloads",
+            subtitle = "Keep your 50 most recently played tracks on the device",
+            checked = prefs.smartDownloads,
+            onChange = viewModel::setSmartDownloads
+        )
+
+        HorizontalDivider(color = AppColors.SurfaceVariant)
+
         Text(
             "Clear downloads",
             color = MaterialTheme.colorScheme.error,
@@ -153,4 +170,30 @@ private fun formatBytes(bytes: Long): String {
     if (gb >= 1) return "%.2f GB".format(gb)
     val mb = bytes / 1_000_000.0
     return "%.0f MB".format(mb)
+}
+
+@Composable
+internal fun ToggleRow(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onChange: (Boolean) -> Unit
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable { onChange(!checked) }
+            .padding(16.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title)
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = AppColors.Secondary
+            )
+        }
+        androidx.compose.material3.Switch(checked = checked, onCheckedChange = onChange)
+    }
 }

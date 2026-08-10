@@ -26,12 +26,14 @@ data class HomeUiState(
     val error: String? = null
 )
 
+@androidx.media3.common.util.UnstableApi
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val repo: JellyfinRepository,
     private val player: PlayerConnection,
     private val settings: SettingsStore,
-    private val actions: ActionsController
+    private val actions: ActionsController,
+    private val downloads: com.jellyfinmusic.data.DownloadsController
 ) : ViewModel() {
 
     val favoriteIds = repo.favoriteIds
@@ -81,13 +83,25 @@ class HomeViewModel @Inject constructor(
                     )
                 }
             }
-                .onSuccess { _state.value = it }
+                .onSuccess {
+                    _state.value = it
+                    // Home is the natural place to run this: it loads on
+                    // launch, and the list it needs is a query away.
+                    syncSmartDownloads()
+                }
                 .onFailure {
                     _state.value = _state.value.copy(
                         isLoading = false,
                         error = it.message ?: "Could not reach the server"
                     )
                 }
+        }
+    }
+
+    private fun syncSmartDownloads() {
+        viewModelScope.launch {
+            val recent = runCatching { repo.recentlyPlayedSongs(50) }.getOrDefault(emptyList())
+            if (recent.isNotEmpty()) downloads.syncSmartDownloads(recent)
         }
     }
 

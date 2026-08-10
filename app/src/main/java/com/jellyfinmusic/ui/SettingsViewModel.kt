@@ -39,10 +39,29 @@ class SettingsViewModel @Inject constructor(
     private val jellyfin: JellyfinRepository,
     private val actions: ActionsController,
     private val playbackState: PlaybackStateStore,
-    private val downloads: com.jellyfinmusic.data.DownloadsController
+    private val downloads: com.jellyfinmusic.data.DownloadsController,
+    private val player: com.jellyfinmusic.playback.PlayerConnection
 ) : ViewModel() {
 
     val downloadedTracks = downloads.downloadedTracks
+    val playbackSettings = settings.state
+
+    fun setAudioQuality(quality: com.jellyfinmusic.data.AudioQuality) =
+        settings.setAudioQuality(quality)
+
+    fun setNormalizeVolume(enabled: Boolean) = settings.setNormalizeVolume(enabled)
+
+    fun setPlaybackSpeed(speed: Float) {
+        settings.setPlaybackSpeed(speed)
+        player.setPlaybackSpeed(speed)
+    }
+
+    fun setWifiOnlyDownloads(enabled: Boolean) {
+        settings.setDownloadOverWifiOnly(enabled)
+        downloads.applyNetworkRequirement()
+    }
+
+    fun setSmartDownloads(enabled: Boolean) = settings.setSmartDownloads(enabled)
 
     fun refreshDownloads() = downloads.refresh()
 

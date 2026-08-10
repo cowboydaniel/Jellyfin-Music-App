@@ -46,6 +46,12 @@ data class BaseItem(
     @SerialName("AlbumPrimaryImageTag") val albumPrimaryImageTag: String? = null,
     @SerialName("UserData") val userData: UserItemData? = null,
     /**
+     * Integrated loudness in LUFS, reported by Jellyfin 10.9+. Used to even out
+     * volume between tracks mastered at very different levels.
+     */
+    @SerialName("LUFS") val lufs: Double? = null,
+    @SerialName("NormalizationGain") val normalizationGain: Double? = null,
+    /**
      * The user a playlist belongs to. Jellyfin 10.9+ reports this; older
      * servers omit it, in which case ownership cannot be determined.
      */
@@ -115,4 +121,11 @@ data class PlaybackReport(
     @SerialName("CanSeek") val canSeek: Boolean = true,
     @SerialName("PlayMethod") val playMethod: String = "DirectStream",
     @SerialName("EventName") val eventName: String? = null
+)
+
+@Serializable
+data class DisplayPreferences(
+    @SerialName("Id") val id: String = "",
+    @SerialName("Client") val client: String = "",
+    @SerialName("CustomPrefs") val customPrefs: Map<String, String> = emptyMap()
 )

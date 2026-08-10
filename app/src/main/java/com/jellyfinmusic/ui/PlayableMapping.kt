@@ -11,7 +11,8 @@ fun BaseItem.toPlayable(repo: JellyfinRepository) = PlayableTrack(
     artist = artistName.orEmpty(),
     album = album.orEmpty(),
     streamUrl = repo.streamUrl(id),
-    artworkUrl = repo.artworkFor(this)
+    artworkUrl = repo.artworkFor(this),
+    lufs = lufs
 )
 
 fun List<BaseItem>.toPlayable(repo: JellyfinRepository) = map { it.toPlayable(repo) }

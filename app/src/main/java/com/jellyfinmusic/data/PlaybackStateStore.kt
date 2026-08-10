@@ -22,7 +22,9 @@ data class SavedQueue(
     val currentIndex: Int = 0,
     val positionMs: Long = 0L,
     val shuffleEnabled: Boolean = false,
-    val repeatMode: Int = 0
+    val repeatMode: Int = 0,
+    /** When this device last wrote the queue, for comparison with the server copy. */
+    val savedAt: Long = 0L
 )
 
 @Serializable
@@ -67,7 +69,9 @@ class PlaybackStateStore @Inject constructor(context: Context) {
             clear()
             return
         }
-        runCatching { json.encodeToString(SavedQueue.serializer(), queue) }
+        runCatching {
+            json.encodeToString(SavedQueue.serializer(), queue.copy(savedAt = System.currentTimeMillis()))
+        }
             .onSuccess { prefs.edit().putString(KEY_QUEUE, it).apply() }
     }
 

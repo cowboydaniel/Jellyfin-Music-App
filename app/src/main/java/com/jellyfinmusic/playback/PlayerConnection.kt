@@ -143,6 +143,10 @@ class PlayerConnection @Inject constructor(
     }
 
     /** Pauses playback after [minutes]; passing 0 cancels a running timer. */
+    fun setPlaybackSpeed(speed: Float) {
+        controller?.setPlaybackSpeed(speed)
+    }
+
     fun setSleepTimer(minutes: Int) {
         handler.removeCallbacks(sleepRunnable)
         if (minutes <= 0) {
@@ -202,6 +206,8 @@ data class PlayerUiState(
     val hasTrack: Boolean get() = currentIndex >= 0 && title.isNotBlank()
 }
 
+const val KEY_LUFS = "lufs"
+
 data class QueueEntry(
     val index: Int,
     val title: String,
@@ -215,7 +221,8 @@ data class PlayableTrack(
     val artist: String,
     val album: String,
     val streamUrl: String,
-    val artworkUrl: String?
+    val artworkUrl: String?,
+    val lufs: Double? = null
 ) {
     fun toMediaItem(): MediaItem = MediaItem.Builder()
         .setMediaId(id)
@@ -228,6 +235,13 @@ data class PlayableTrack(
                 .setArtworkUri(artworkUrl?.let { android.net.Uri.parse(it) })
                 .setIsBrowsable(false)
                 .setIsPlayable(true)
+                // Carried on the item so the service can set the right volume
+                // as each track starts, without another lookup.
+                .setExtras(
+                    android.os.Bundle().apply {
+                        lufs?.let { putDouble(KEY_LUFS, it) }
+                    }
+                )
                 .build()
         )
         .build()

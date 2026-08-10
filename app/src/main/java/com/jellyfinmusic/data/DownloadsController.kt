@@ -54,18 +54,66 @@ class DownloadsController @Inject constructor(
             download: Download,
             finalException: Exception?
         ) {
+            // Lyrics are fetched live, so they are pulled down alongside the
+            // audio the moment a download completes.
+            if (download.state == Download.STATE_COMPLETED) {
+                scope.launch { runCatching { repo.cacheLyricsFor(download.request.id) } }
+            }
             refresh()
         }
 
         override fun onDownloadRemoved(downloadManager: DownloadManager, download: Download) {
+            repo.dropCachedLyrics(download.request.id)
             refresh()
         }
     }
 
     init {
         downloadManager.addListener(listener)
+        applyNetworkRequirement()
         refresh()
     }
+
+    /**
+     * Holds downloads until unmetered network when the user asks for it, rather
+     * than silently spending mobile data on a whole album.
+     */
+    fun applyNetworkRequirement() {
+        val requirements = if (settings.current.downloadOverWifiOnly) {
+            androidx.media3.exoplayer.scheduler.Requirements(
+                androidx.media3.exoplayer.scheduler.Requirements.NETWORK_UNMETERED
+            )
+        } else {
+            androidx.media3.exoplayer.scheduler.Requirements(
+                androidx.media3.exoplayer.scheduler.Requirements.NETWORK
+            )
+        }
+        runCatching { downloadManager.requirements = requirements }
+    }
+
+    /**
+     * Keeps the most recently played tracks downloaded and drops the rest.
+     *
+     * Only tracks it added are removed again, so an explicit download is never
+     * deleted by the automatic pass.
+     */
+    fun syncSmartDownloads(recentIds: List<BaseItem>) {
+        if (!settings.current.smartDownloads) return
+        scope.launch {
+            val keep = recentIds.take(SMART_DOWNLOAD_LIMIT)
+            val keepIds = keep.map { it.id }.toSet()
+            keep.filter { stateOf(it.id) == DownloadState.NONE }.forEach { download(it, smart = true) }
+            smartDownloadIds
+                .filterNot { it in keepIds }
+                .forEach {
+                    remove(it)
+                    smartDownloadIds.remove(it)
+                }
+        }
+    }
+
+    /** IDs this controller downloaded automatically, so they can be reclaimed. */
+    private val smartDownloadIds = mutableSetOf<String>()
 
     fun stateOf(itemId: String): DownloadState = _states.value[itemId] ?: DownloadState.NONE
 
@@ -73,7 +121,8 @@ class DownloadsController @Inject constructor(
      * Queues a track. The display metadata rides along in the request's data
      * field so the Downloads list can be rendered without the server.
      */
-    fun download(item: BaseItem) {
+    fun download(item: BaseItem, smart: Boolean = false) {
+        if (smart) smartDownloadIds.add(item.id)
         val request = DownloadRequest.Builder(item.id, android.net.Uri.parse(repo.streamUrl(item.id)))
             .setData(
                 SavedTrack(
@@ -154,8 +203,13 @@ class DownloadsController @Inject constructor(
         artworkUrl = track.artworkUrl
     )
 
+    private companion object {
+        const val SMART_DOWNLOAD_LIMIT = 50
+    }
+
     fun clearForSignOut() {
         removeAll()
+        repo.clearCachedLyrics()
         _states.value = emptyMap()
         _downloadedTracks.value = emptyList()
     }

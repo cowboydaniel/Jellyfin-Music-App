@@ -49,6 +49,10 @@ class MusicService : MediaLibraryService() {
 
     @Inject lateinit var cacheDataSourceFactory: androidx.media3.datasource.cache.CacheDataSource.Factory
 
+    @Inject lateinit var settings: com.jellyfinmusic.data.SettingsStore
+
+    @Inject lateinit var queueSync: com.jellyfinmusic.data.QueueSync
+
     private var mediaSession: MediaLibrarySession? = null
 
     private val serviceScope =
@@ -62,6 +66,7 @@ class MusicService : MediaLibraryService() {
             val player = mediaSession?.player
             if (player?.isPlaying == true) {
                 saveState()
+                pushQueueToServer(player)
                 player.currentMediaItem?.let {
                     reporter.onProgress(it.mediaId, player.currentPosition, isPaused = false)
                 }
@@ -86,7 +91,20 @@ class MusicService : MediaLibraryService() {
                 saveState()
             }
             reportPlaybackChange(player, events)
+            if (events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION)) {
+                applyTrackVolume(player)
+            }
         }
+    }
+
+    /** Levels the current track against the configured reference loudness. */
+    private fun applyTrackVolume(player: Player) {
+        val lufs = player.currentMediaItem
+            ?.mediaMetadata
+            ?.extras
+            ?.takeIf { it.containsKey(KEY_LUFS) }
+            ?.getDouble(KEY_LUFS)
+        player.volume = Normalization.volumeFor(lufs, settings.current.normalizeVolume)
     }
 
     /**
@@ -145,6 +163,8 @@ class MusicService : MediaLibraryService() {
             .build()
 
         restoreState(player)
+        player.setPlaybackSpeed(settings.current.playbackSpeed)
+        applyTrackVolume(player)
         player.addListener(listener)
         handler.postDelayed(positionSaver, SAVE_INTERVAL_MS)
     }
@@ -342,7 +362,9 @@ class MusicService : MediaLibraryService() {
      * making noise on its own.
      */
     private fun restoreState(player: Player) {
-        val saved = playbackState.load() ?: return
+        val saved = playbackState.load()
+        serviceScope.launch { restoreFromServerIfNewer(player, saved?.savedAt ?: 0L) }
+        if (saved == null) return
         val items = saved.tracks.map { track ->
             PlayableTrack(
                 id = track.id,
@@ -360,6 +382,47 @@ class MusicService : MediaLibraryService() {
         player.setMediaItems(items, index, saved.positionMs.coerceAtLeast(0L))
         player.shuffleModeEnabled = saved.shuffleEnabled
         player.repeatMode = saved.repeatMode
+        player.playWhenReady = false
+        player.prepare()
+    }
+
+    /**
+     * Publishes the queue for other devices. Rate-limited, because the
+     * checkpoint timer fires far more often than the queue actually changes.
+     */
+    private var lastQueuePush = 0L
+
+    private fun pushQueueToServer(player: Player) {
+        val now = System.currentTimeMillis()
+        if (now - lastQueuePush < QUEUE_PUSH_INTERVAL_MS) return
+        lastQueuePush = now
+        val ids = (0 until player.mediaItemCount).map { player.getMediaItemAt(it).mediaId }
+        if (ids.isEmpty()) return
+        val index = player.currentMediaItemIndex
+        val position = player.currentPosition
+        serviceScope.launch { queueSync.push(ids, index, position) }
+    }
+
+    /**
+     * Adopts another device's queue when it is newer than what this device last
+     * played, so picking the phone up after the desktop continues the same
+     * listening rather than resurrecting something older.
+     */
+    private suspend fun restoreFromServerIfNewer(player: Player, localSavedAt: Long) {
+        val remote = queueSync.pull() ?: return
+        if (remote.updatedAt <= localSavedAt) return
+        if (player.isPlaying) return
+
+        val items = remote.trackIds.mapNotNull { id ->
+            runCatching { repo.itemById(id) }.getOrNull()
+        }
+        if (items.isEmpty()) return
+
+        player.setMediaItems(
+            items.map { it.toPlayableMediaItem() },
+            remote.currentIndex.coerceIn(0, items.lastIndex),
+            remote.positionMs.coerceAtLeast(0L)
+        )
         player.playWhenReady = false
         player.prepare()
     }
@@ -394,6 +457,7 @@ class MusicService : MediaLibraryService() {
 
     private companion object {
         const val SAVE_INTERVAL_MS = 5_000L
+        const val QUEUE_PUSH_INTERVAL_MS = 30_000L
         const val ROOT_ID = "root"
         const val NODE_PLAYLISTS = "node_playlists"
         const val NODE_ALBUMS = "node_albums"

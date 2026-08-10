@@ -13,7 +13,8 @@ import javax.inject.Singleton
 @Singleton
 class JellyfinRepository @Inject constructor(
     private val apis: ApiProvider,
-    private val settings: SettingsStore
+    private val settings: SettingsStore,
+    private val lyricsCache: LyricsCache
 ) {
 
     suspend fun login(serverUrl: String, username: String, password: String): Result<Unit> =
@@ -114,6 +115,16 @@ class JellyfinRepository @Inject constructor(
         limit = limit
     ).items.also { noteFavorites(it) }
 
+    /** Most recently played tracks — the source list for smart downloads. */
+    suspend fun recentlyPlayedSongs(limit: Int = 50): List<BaseItem> = apis.jellyfin().getItems(
+        userId = userId(),
+        includeItemTypes = "Audio",
+        sortBy = "DatePlayed",
+        sortOrder = "Descending",
+        filters = "IsPlayed",
+        limit = limit
+    ).items.also { noteFavorites(it) }
+
     /** Random tracks, used to fill Quick picks on a library with no play history. */
     suspend fun randomSongs(limit: Int = 40): List<BaseItem> = apis.jellyfin().getItems(
         userId = userId(),
@@ -162,9 +173,30 @@ class JellyfinRepository @Inject constructor(
             limit = limit
         ).items.also { noteFavorites(it) }
 
-    /** Lyrics for a track, empty when the server has none or is pre-10.9. */
-    suspend fun lyrics(itemId: String): List<com.jellyfinmusic.network.LyricLine> =
-        runCatching { apis.jellyfin().getLyrics(itemId).lyrics }.getOrDefault(emptyList())
+    /**
+     * Lyrics for a track. The on-disk copy is preferred, so a downloaded track
+     * keeps its lyrics with no connection; otherwise they are fetched and, if
+     * the track is downloaded, kept.
+     */
+    suspend fun lyrics(itemId: String, cacheResult: Boolean = false): List<com.jellyfinmusic.network.LyricLine> {
+        lyricsCache.read(itemId)?.let { return it }
+        val fetched = runCatching { apis.jellyfin().getLyrics(itemId).lyrics }
+            .getOrDefault(emptyList())
+        if (cacheResult) lyricsCache.write(itemId, fetched)
+        return fetched
+    }
+
+    /** Pulls lyrics down for a track that has just been downloaded. */
+    suspend fun cacheLyricsFor(itemId: String) {
+        if (lyricsCache.read(itemId) != null) return
+        val fetched = runCatching { apis.jellyfin().getLyrics(itemId).lyrics }
+            .getOrDefault(emptyList())
+        lyricsCache.write(itemId, fetched)
+    }
+
+    fun dropCachedLyrics(itemId: String) = lyricsCache.remove(itemId)
+
+    fun clearCachedLyrics() = lyricsCache.clear()
 
     /** Server-generated radio seeded from a track, album or artist. */
     suspend fun instantMix(itemId: String): List<BaseItem> =
@@ -272,10 +304,22 @@ class JellyfinRepository @Inject constructor(
             limit = limit
         ).items
 
+    /**
+     * Stream URL for a track, shaped by the chosen quality tier.
+     *
+     * ORIGINAL uses the static endpoint, which serves the file untouched — the
+     * only way to get real FLAC, and the only way gapless playback can work,
+     * since a transcoded stream loses the encoder padding gapless relies on.
+     */
     fun streamUrl(itemId: String): String {
         val s = settings.current
-        // Static=true asks the server for the original file rather than a transcode,
-        // which ExoPlayer can handle directly for the common lossy/lossless formats.
+        val quality = s.audioQuality
+        if (quality == AudioQuality.ORIGINAL) {
+            return "${s.jellyfinUrl}Audio/$itemId/stream" +
+                "?static=true" +
+                "&api_key=${s.accessToken}" +
+                "&deviceId=jellyfin-music-android"
+        }
         return "${s.jellyfinUrl}Audio/$itemId/universal" +
             "?UserId=${s.userId}" +
             "&DeviceId=jellyfin-music-android" +
@@ -284,7 +328,7 @@ class JellyfinRepository @Inject constructor(
             "&TranscodingProtocol=hls" +
             "&AudioCodec=aac" +
             "&Container=opus,mp3,aac,m4a,flac,webma,webm,wav,ogg" +
-            "&MaxStreamingBitrate=320000"
+            "&MaxStreamingBitrate=${quality.maxBitrate}"
     }
 
     fun imageUrl(itemId: String?, tag: String? = null, maxSize: Int = 512): String? {

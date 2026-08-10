@@ -103,6 +103,25 @@ interface JellyfinApi {
     @GET("Audio/{itemId}/Lyrics")
     suspend fun getLyrics(@Path("itemId") itemId: String): LyricsResponse
 
+    /**
+     * Per-user key/value storage on the server. Jellyfin has no queue API, so
+     * the current queue is kept here to sync between devices.
+     */
+    @GET("DisplayPreferences/{id}")
+    suspend fun getDisplayPreferences(
+        @Path("id") id: String,
+        @Query("userId") userId: String,
+        @Query("client") client: String
+    ): DisplayPreferences
+
+    @POST("DisplayPreferences/{id}")
+    suspend fun updateDisplayPreferences(
+        @Path("id") id: String,
+        @Query("userId") userId: String,
+        @Query("client") client: String,
+        @Body body: DisplayPreferences
+    )
+
     /** Music genres present in the library, used for the Explore mood chips. */
     @GET("MusicGenres")
     suspend fun getMusicGenres(

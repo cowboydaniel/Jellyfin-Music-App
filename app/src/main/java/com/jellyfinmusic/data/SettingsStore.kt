@@ -42,7 +42,12 @@ class SettingsStore @Inject constructor(context: Context) {
         lidarrApiKey = prefs.getString(KEY_LIDARR_KEY, "").orEmpty(),
         lidarrRootFolder = prefs.getString(KEY_LIDARR_ROOT, "").orEmpty(),
         lidarrQualityProfileId = prefs.getInt(KEY_LIDARR_PROFILE, 1),
-        lidarrMetadataProfileId = prefs.getInt(KEY_LIDARR_METADATA, 1)
+        lidarrMetadataProfileId = prefs.getInt(KEY_LIDARR_METADATA, 1),
+        audioQuality = AudioQuality.fromName(prefs.getString(KEY_QUALITY, "").orEmpty()),
+        normalizeVolume = prefs.getBoolean(KEY_NORMALIZE, true),
+        playbackSpeed = prefs.getFloat(KEY_SPEED, 1.0f),
+        downloadOverWifiOnly = prefs.getBoolean(KEY_WIFI_ONLY, true),
+        smartDownloads = prefs.getBoolean(KEY_SMART_DOWNLOADS, false)
     )
 
     private fun publish() {
@@ -100,6 +105,31 @@ class SettingsStore @Inject constructor(context: Context) {
         prefs.edit().remove(KEY_RECENT_SEARCHES).apply()
     }
 
+    fun setAudioQuality(quality: AudioQuality) {
+        prefs.edit().putString(KEY_QUALITY, quality.name).apply()
+        publish()
+    }
+
+    fun setNormalizeVolume(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_NORMALIZE, enabled).apply()
+        publish()
+    }
+
+    fun setPlaybackSpeed(speed: Float) {
+        prefs.edit().putFloat(KEY_SPEED, speed).apply()
+        publish()
+    }
+
+    fun setDownloadOverWifiOnly(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_WIFI_ONLY, enabled).apply()
+        publish()
+    }
+
+    fun setSmartDownloads(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_SMART_DOWNLOADS, enabled).apply()
+        publish()
+    }
+
     fun logout() {
         prefs.edit()
             .remove(KEY_TOKEN)
@@ -121,7 +151,24 @@ class SettingsStore @Inject constructor(context: Context) {
         const val KEY_LIDARR_PROFILE = "lidarr_quality_profile"
         const val KEY_LIDARR_METADATA = "lidarr_metadata_profile"
         const val KEY_RECENT_SEARCHES = "recent_searches"
+        const val KEY_QUALITY = "audio_quality"
+        const val KEY_NORMALIZE = "normalize_volume"
+        const val KEY_SPEED = "playback_speed"
+        const val KEY_WIFI_ONLY = "download_wifi_only"
+        const val KEY_SMART_DOWNLOADS = "smart_downloads"
         const val MAX_RECENT_SEARCHES = 12
+    }
+}
+
+/** Streaming tier. ORIGINAL asks the server for the untouched file. */
+enum class AudioQuality(val label: String, val maxBitrate: Int?) {
+    LOW("Low (128 kbps)", 128_000),
+    NORMAL("Normal (192 kbps)", 192_000),
+    HIGH("High (320 kbps)", 320_000),
+    ORIGINAL("Original (no transcode)", null);
+
+    companion object {
+        fun fromName(name: String) = entries.firstOrNull { it.name == name } ?: HIGH
     }
 }
 
@@ -134,7 +181,12 @@ data class Settings(
     val lidarrApiKey: String = "",
     val lidarrRootFolder: String = "",
     val lidarrQualityProfileId: Int = 1,
-    val lidarrMetadataProfileId: Int = 1
+    val lidarrMetadataProfileId: Int = 1,
+    val audioQuality: AudioQuality = AudioQuality.HIGH,
+    val normalizeVolume: Boolean = true,
+    val playbackSpeed: Float = 1.0f,
+    val downloadOverWifiOnly: Boolean = true,
+    val smartDownloads: Boolean = false
 ) {
     val isLoggedIn: Boolean get() = jellyfinUrl.isNotBlank() && accessToken.isNotBlank() && userId.isNotBlank()
     val hasLidarr: Boolean get() = lidarrUrl.isNotBlank() && lidarrApiKey.isNotBlank()

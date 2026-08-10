@@ -32,6 +32,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.jellyfinmusic.network.LidarrProfile
 import com.jellyfinmusic.ui.SettingsViewModel
+import com.jellyfinmusic.ui.theme.AppColors
 
 @Composable
 fun SettingsScreen(
@@ -125,6 +126,59 @@ fun SettingsScreen(
                     CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                 } else {
                     Text("Test Lidarr connection")
+                }
+            }
+        }
+
+        HorizontalDivider()
+
+        Text("Playback", style = MaterialTheme.typography.titleMedium)
+
+        val prefs by viewModel.playbackSettings.collectAsStateWithLifecycle()
+
+        Text(
+            "Audio quality",
+            style = MaterialTheme.typography.bodySmall,
+            color = AppColors.Secondary
+        )
+        com.jellyfinmusic.data.AudioQuality.entries.forEach { quality ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable { viewModel.setAudioQuality(quality) }
+                    .padding(vertical = 10.dp),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+            ) {
+                androidx.compose.material3.RadioButton(
+                    selected = prefs.audioQuality == quality,
+                    onClick = { viewModel.setAudioQuality(quality) }
+                )
+                Text(quality.label, modifier = Modifier.padding(start = 8.dp))
+            }
+        }
+        Text(
+            "Original streams the untouched file — the only setting that keeps " +
+                "FLAC intact and allows gapless playback.",
+            style = MaterialTheme.typography.bodySmall,
+            color = AppColors.Secondary
+        )
+
+        ToggleRow(
+            title = "Consistent volume",
+            subtitle = "Level tracks against each other using the server's loudness data",
+            checked = prefs.normalizeVolume,
+            onChange = viewModel::setNormalizeVolume
+        )
+
+        Text(
+            "Playback speed: ${"%.2f".format(prefs.playbackSpeed)}x",
+            style = MaterialTheme.typography.bodySmall,
+            color = AppColors.Secondary
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(0.75f, 1.0f, 1.25f, 1.5f, 2.0f).forEach { speed ->
+                OutlinedButton(onClick = { viewModel.setPlaybackSpeed(speed) }) {
+                    Text("${speed}x")
                 }
             }
         }
