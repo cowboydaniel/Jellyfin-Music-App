@@ -19,6 +19,7 @@ class ActionsViewModel @Inject constructor(
     val toast = actions.toast
     val favoriteIds = actions.favoriteIds
     val downloadStates = actions.downloadStates
+    val dislikedIds = actions.dislikedIds
 
     fun imageUrl(item: BaseItem): String? = repo.artworkFor(item)
 }

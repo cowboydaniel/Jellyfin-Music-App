@@ -75,6 +75,8 @@ data class BaseItem(
 @Serializable
 data class UserItemData(
     @SerialName("IsFavorite") val isFavorite: Boolean = false,
+    /** Thumbs rating: true up, false down, absent for no opinion. */
+    @SerialName("Likes") val likes: Boolean? = null,
     @SerialName("Played") val played: Boolean = false,
     @SerialName("PlayCount") val playCount: Int = 0
 )

@@ -217,6 +217,8 @@ class JellyfinRepository @Inject constructor(
         if (items.isEmpty()) return
         val favorites = items.filter { it.isFavorite }.map { it.id }
         val known = items.map { it.id }.toSet()
+        val disliked = items.filter { it.userData?.likes == false }.map { it.id }
+        _dislikedIds.value = _dislikedIds.value.filterNot { it in known }.toSet() + disliked
         _favoriteIds.value = _favoriteIds.value
             // Items reported as not-favourite clear any stale local entry.
             .filterNot { it in known }
@@ -231,6 +233,7 @@ class JellyfinRepository @Inject constructor(
      */
     fun clearUserState() {
         _favoriteIds.value = emptySet()
+        _dislikedIds.value = emptySet()
     }
 
     /** Optimistic toggle; the local state is rolled back if the server refuses. */
@@ -254,6 +257,46 @@ class JellyfinRepository @Inject constructor(
             _favoriteIds.value - itemId
         }
     }
+
+    // ---- Ratings ----------------------------------------------------------
+
+    private val _dislikedIds = MutableStateFlow<Set<String>>(emptySet())
+
+    /** Locally mirrored thumbs-down state, applied optimistically like favourites. */
+    val dislikedIds: StateFlow<Set<String>> = _dislikedIds.asStateFlow()
+
+    fun isDisliked(itemId: String): Boolean = itemId in _dislikedIds.value
+
+    /**
+     * Toggles thumbs-down. Jellyfin has no "skip this in future" behaviour, so
+     * this records the opinion and the app filters on it rather than the server.
+     */
+    suspend fun toggleDislike(itemId: String): Result<Boolean> {
+        val wasDisliked = isDisliked(itemId)
+        _dislikedIds.value = if (wasDisliked) {
+            _dislikedIds.value - itemId
+        } else {
+            _dislikedIds.value + itemId
+        }
+        return runCatching {
+            if (wasDisliked) {
+                apis.jellyfin().clearRating(userId(), itemId)
+            } else {
+                apis.jellyfin().setRating(userId(), itemId, likes = false)
+            }
+            !wasDisliked
+        }.onFailure {
+            _dislikedIds.value = if (wasDisliked) {
+                _dislikedIds.value + itemId
+            } else {
+                _dislikedIds.value - itemId
+            }
+        }
+    }
+
+    /** A link other Jellyfin clients and the web UI can open. */
+    fun shareUrl(itemId: String): String =
+        "${settings.current.jellyfinUrl}web/index.html#!/details?id=$itemId"
 
     suspend fun favoriteSongs(): List<BaseItem> = apis.jellyfin().getItems(
         userId = userId(),

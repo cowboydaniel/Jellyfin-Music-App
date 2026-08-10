@@ -28,6 +28,8 @@ import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Downloading
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.ThumbDown
 import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
@@ -79,6 +81,7 @@ fun ActionSheetHost(
     val toast by viewModel.toast.collectAsStateWithLifecycle()
     val favorites by viewModel.favoriteIds.collectAsStateWithLifecycle()
     val downloadStates by viewModel.downloadStates.collectAsStateWithLifecycle()
+    val disliked by viewModel.dislikedIds.collectAsStateWithLifecycle()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     LaunchedEffect(toast) {
@@ -123,6 +126,12 @@ fun ActionSheetHost(
                 },
                 onAddToPlaylist = { viewModel.actions.showAddToPlaylist(current.item) },
                 onStartMix = { viewModel.actions.startMix(current.item) },
+                isDisliked = current.item.id in disliked,
+                onToggleDislike = {
+                    viewModel.actions.toggleDislike(current.item)
+                    viewModel.actions.dismissSheet()
+                },
+                onShare = { viewModel.actions.shareItem(current.item) },
                 onGoToAlbum = { viewModel.actions.goToAlbum(current.item) },
                 onGoToArtist = { viewModel.actions.goToArtist(current.item) },
                 onRemoveFromPlaylist = {
@@ -163,6 +172,9 @@ private fun TrackMenuSheet(
     onToggleFavorite: () -> Unit,
     onAddToPlaylist: () -> Unit,
     onStartMix: () -> Unit,
+    isDisliked: Boolean,
+    onToggleDislike: () -> Unit,
+    onShare: () -> Unit,
     onGoToAlbum: () -> Unit,
     onGoToArtist: () -> Unit,
     onRemoveFromPlaylist: () -> Unit
@@ -197,6 +209,15 @@ private fun TrackMenuSheet(
                     .clickable(onClick = onToggleFavorite)
                     .padding(8.dp)
             )
+            Icon(
+                Icons.Filled.ThumbDown,
+                contentDescription = "Dislike",
+                tint = if (isDisliked) AppColors.Accent else AppColors.Secondary,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .clickable(onClick = onToggleDislike)
+                    .padding(8.dp)
+            )
         }
         HorizontalDivider(color = AppColors.SurfaceVariant)
 
@@ -219,6 +240,12 @@ private fun TrackMenuSheet(
                 "Save to playlist",
                 Modifier.weight(1f),
                 onAddToPlaylist
+            )
+            QuickTile(
+                Icons.Filled.Share,
+                "Share",
+                Modifier.weight(1f),
+                onShare
             )
             QuickTile(
                 when (downloadState) {

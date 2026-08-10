@@ -27,6 +27,9 @@ sealed interface ActionSheet {
     data class CreatePlaylist(val seedItem: BaseItem?) : ActionSheet
 }
 
+/** A share sheet payload, handed out for the host to fire as an intent. */
+data class SharePayload(val title: String, val text: String)
+
 /** Somewhere the action layer wants the app to navigate to. */
 sealed interface NavTarget {
     data class Album(val id: String, val name: String) : NavTarget
@@ -71,6 +74,42 @@ class ActionsController @Inject constructor(
     val playlistRevision: StateFlow<Int> = _playlistRevision.asStateFlow()
 
     val favoriteIds: StateFlow<Set<String>> get() = repo.favoriteIds
+
+    val dislikedIds: StateFlow<Set<String>> get() = repo.dislikedIds
+
+    /**
+     * Share requests. Firing an intent needs a Context, which this layer does
+     * not hold, so the request travels out to whoever is hosting the UI.
+     */
+    private val _share = kotlinx.coroutines.flow.MutableSharedFlow<SharePayload>(extraBufferCapacity = 4)
+    val share = _share.asSharedFlow()
+
+    fun shareItem(item: BaseItem) {
+        dismissSheet()
+        _share.tryEmit(
+            SharePayload(
+                title = item.name.orEmpty(),
+                text = buildString {
+                    append(item.name.orEmpty())
+                    item.artistName?.takeIf { it.isNotBlank() }?.let { append(" — ").append(it) }
+                    append("\n").append(repo.shareUrl(item.id))
+                }
+            )
+        )
+    }
+
+    fun toggleDislike(item: BaseItem) = toggleDislikeById(item.id)
+
+    fun toggleDislikeById(itemId: String) {
+        scope.launch {
+            val nowDisliked = !repo.isDisliked(itemId)
+            repo.toggleDislike(itemId)
+                .onSuccess {
+                    _toast.value = if (nowDisliked) "Marked as disliked" else "Rating cleared"
+                }
+                .onFailure { _toast.value = it.message ?: "Could not save the rating" }
+        }
+    }
 
     val downloadStates: StateFlow<Map<String, DownloadState>> get() = downloads.states
 

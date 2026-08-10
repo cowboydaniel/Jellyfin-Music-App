@@ -25,12 +25,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
+import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DragHandle
@@ -44,7 +47,9 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material.icons.filled.ThumbDown
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.AlertDialog
@@ -80,6 +85,7 @@ import com.jellyfinmusic.network.LyricLine
 import com.jellyfinmusic.playback.PlayerConnection
 import com.jellyfinmusic.playback.PlayerUiState
 import com.jellyfinmusic.ui.LyricsState
+import com.jellyfinmusic.ui.RelatedState
 import com.jellyfinmusic.ui.components.Artwork
 import com.jellyfinmusic.ui.components.formatDuration
 import com.jellyfinmusic.ui.components.rememberDominantColor
@@ -105,7 +111,16 @@ fun NowPlayingScreen(
     onStartRadio: () -> Unit = {},
     onLyricsRequested: () -> Unit = {},
     sleepTimerEndsAt: Long? = null,
-    onSetSleepTimer: (Int) -> Unit = {}
+    onSetSleepTimer: (Int) -> Unit = {},
+    related: RelatedState = RelatedState(),
+    isDisliked: Boolean = false,
+    onToggleDislike: () -> Unit = {},
+    onShare: () -> Unit = {},
+    onGoToAlbum: () -> Unit = {},
+    onGoToArtist: () -> Unit = {},
+    onRelatedRequested: () -> Unit = {},
+    onPlayRelated: (com.jellyfinmusic.network.BaseItem) -> Unit = {},
+    artworkFor: (com.jellyfinmusic.network.BaseItem) -> String? = { null }
 ) {
     var showSleepTimer by remember { mutableStateOf(false) }
     var tab by remember { mutableStateOf(PlayerTab.UP_NEXT) }
@@ -121,6 +136,7 @@ fun NowPlayingScreen(
 
     LaunchedEffect(panelOpen, tab, state.currentItemId) {
         if (panelOpen && tab == PlayerTab.LYRICS) onLyricsRequested()
+        if (panelOpen && tab == PlayerTab.RELATED) onRelatedRequested()
     }
 
     if (showSleepTimer) {
@@ -189,7 +205,8 @@ fun NowPlayingScreen(
                 when {
                     panelOpen && tab == PlayerTab.UP_NEXT -> QueuePanel(state, player)
                     panelOpen && tab == PlayerTab.LYRICS -> LyricsPanel(lyrics, state.positionMs)
-                    panelOpen && tab == PlayerTab.RELATED -> RelatedPanel(onStartRadio)
+                    panelOpen && tab == PlayerTab.RELATED ->
+                        RelatedPanel(related, artworkFor, onPlayRelated, onStartRadio)
                     else -> Artwork(
                         state.artworkUrl,
                         Modifier
@@ -206,7 +223,13 @@ fun NowPlayingScreen(
                 Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(Modifier.weight(1f)) {
+                Column(
+                    Modifier
+                        .weight(1f)
+                        // Tapping the title opens the album, the artist line the
+                        // artist — the same shortcuts YouTube Music puts here.
+                        .clickable(onClick = onGoToAlbum)
+                ) {
                     Text(
                         state.title,
                         style = MaterialTheme.typography.titleLarge,
@@ -222,9 +245,20 @@ fun NowPlayingScreen(
                         maxLines = 1,
                         modifier = Modifier
                             .padding(top = 2.dp)
+                            .clickable(onClick = onGoToArtist)
                             .basicMarquee(iterations = Int.MAX_VALUE)
                     )
                 }
+                Icon(
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = "Go to album",
+                    tint = AppColors.Secondary,
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onGoToAlbum)
+                        .padding(4.dp)
+                )
             }
 
             // Action chips under the title, the way YouTube Music groups like,
@@ -243,6 +277,12 @@ fun NowPlayingScreen(
                     onClick = onToggleFavorite
                 )
                 ActionChip(
+                    Icons.Filled.ThumbDown,
+                    "Dislike",
+                    selected = isDisliked,
+                    onClick = onToggleDislike
+                )
+                ActionChip(
                     Icons.Filled.Lyrics,
                     "Lyrics",
                     selected = panelOpen && tab == PlayerTab.LYRICS,
@@ -257,6 +297,7 @@ fun NowPlayingScreen(
                     onClick = onAddToPlaylist
                 )
                 ActionChip(Icons.Filled.Radio, "Radio", onClick = onStartRadio)
+                ActionChip(Icons.Filled.Share, "Share", onClick = onShare)
                 ActionChip(
                     Icons.Filled.Bedtime,
                     "Sleep timer",
@@ -571,41 +612,155 @@ private fun List<LyricLine>.activeLineIndex(positionMs: Long): Int =
     indexOfLast { (it.startMs ?: Long.MAX_VALUE) <= positionMs }
 
 @Composable
-private fun RelatedPanel(onStartRadio: () -> Unit) {
-    Column(
-        Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            "Build a queue of similar tracks from your library.",
-            color = AppColors.Secondary,
-            style = MaterialTheme.typography.bodyMedium,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 24.dp)
-        )
-        Row(
-            Modifier
-                .padding(top = 16.dp)
-                .clip(CircleShape)
-                .background(AppColors.OnBackground)
-                .clickable(onClick = onStartRadio)
-                .padding(horizontal = 20.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
+private fun RelatedPanel(
+    related: RelatedState,
+    artworkFor: (com.jellyfinmusic.network.BaseItem) -> String?,
+    onPlay: (com.jellyfinmusic.network.BaseItem) -> Unit,
+    onStartRadio: () -> Unit
+) {
+    if (related.isLoading) {
+        Box(Modifier.fillMaxSize(), Alignment.Center) {
+            CircularProgressIndicator(color = AppColors.OnBackground, strokeWidth = 2.dp)
+        }
+        return
+    }
+
+    if (related.isEmpty) {
+        Column(
+            Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Icon(
-                Icons.Filled.Radio,
-                contentDescription = null,
-                tint = AppColors.Background,
-                modifier = Modifier.size(18.dp)
+            Text(
+                "Nothing related in your library.",
+                color = AppColors.Secondary,
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center
+            )
+            Row(
+                Modifier
+                    .padding(top = 16.dp)
+                    .clip(CircleShape)
+                    .background(AppColors.OnBackground)
+                    .clickable(onClick = onStartRadio)
+                    .padding(horizontal = 20.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Filled.Radio,
+                    contentDescription = null,
+                    tint = AppColors.Background,
+                    modifier = Modifier.size(18.dp)
+                )
+                Text(
+                    "Start radio",
+                    color = AppColors.Background,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(start = 8.dp)
+                )
+            }
+        }
+        return
+    }
+
+    LazyColumn(Modifier.fillMaxSize()) {
+        if (related.moreFromArtist.isNotEmpty()) {
+            item { RelatedHeading("More from ${related.artistName}") }
+            items(related.moreFromArtist, key = { "artist-" + it.id }) { track ->
+                RelatedRow(track, artworkFor(track), onPlay)
+            }
+        }
+        if (related.moreFromAlbum.isNotEmpty()) {
+            item { RelatedHeading("Rest of ${related.albumName}") }
+            items(related.moreFromAlbum, key = { "album-" + it.id }) { track ->
+                RelatedRow(track, artworkFor(track), onPlay)
+            }
+        }
+    }
+}
+
+@Composable
+private fun RelatedHeading(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelLarge,
+        color = AppColors.Secondary,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.padding(top = 12.dp, bottom = 6.dp)
+    )
+}
+
+/** Tapping queues the track next, rather than losing the current queue. */
+@Composable
+private fun RelatedRow(
+    track: com.jellyfinmusic.network.BaseItem,
+    artworkUrl: String?,
+    onPlay: (com.jellyfinmusic.network.BaseItem) -> Unit
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable { onPlay(track) }
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Artwork(artworkUrl, Modifier.size(44.dp), shape = RoundedCornerShape(4.dp))
+        Column(
+            Modifier
+                .weight(1f)
+                .padding(horizontal = 12.dp)
+        ) {
+            Text(
+                track.name.orEmpty(),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodyMedium
             )
             Text(
-                "Start radio",
-                color = AppColors.Background,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(start = 8.dp)
+                track.artistName.orEmpty(),
+                maxLines = 1,
+                style = MaterialTheme.typography.bodySmall,
+                color = AppColors.Secondary
             )
         }
+        Icon(
+            Icons.AutoMirrored.Filled.PlaylistPlay,
+            contentDescription = "Play next",
+            tint = AppColors.Secondary,
+            modifier = Modifier.size(22.dp)
+        )
+    }
+}
+
+/** Pill-shaped action used in the player's chip row. */
+@Composable
+private fun ActionChip(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    selected: Boolean = false
+) {
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(50))
+            .background(if (selected) AppColors.OnBackground else AppColors.SurfaceVariant)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = if (selected) AppColors.Background else AppColors.OnBackground,
+            modifier = Modifier.size(18.dp)
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (selected) AppColors.Background else AppColors.OnBackground,
+            modifier = Modifier.padding(start = 6.dp)
+        )
     }
 }
 
@@ -652,35 +807,4 @@ private fun SleepTimerDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
-}
-
-/** Pill-shaped action used in the player's chip row. */
-@Composable
-private fun ActionChip(
-    icon: ImageVector,
-    label: String,
-    onClick: () -> Unit,
-    selected: Boolean = false
-) {
-    Row(
-        Modifier
-            .clip(RoundedCornerShape(50))
-            .background(if (selected) AppColors.OnBackground else AppColors.SurfaceVariant)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            icon,
-            contentDescription = null,
-            tint = if (selected) AppColors.Background else AppColors.OnBackground,
-            modifier = Modifier.size(18.dp)
-        )
-        Text(
-            label,
-            style = MaterialTheme.typography.labelLarge,
-            color = if (selected) AppColors.Background else AppColors.OnBackground,
-            modifier = Modifier.padding(start = 6.dp)
-        )
-    }
 }

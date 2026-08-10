@@ -177,6 +177,8 @@ private fun AppRoot(startLoggedIn: Boolean, player: PlayerConnection) {
     val favoriteIds by playerViewModel.favoriteIds.collectAsStateWithLifecycle()
     val lyricsState by playerViewModel.lyrics.collectAsStateWithLifecycle()
     val sleepTimerEndsAt by playerViewModel.sleepTimerEndsAt.collectAsStateWithLifecycle()
+    val relatedState by playerViewModel.related.collectAsStateWithLifecycle()
+    val dislikedIds by playerViewModel.dislikedIds.collectAsStateWithLifecycle()
 
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
@@ -189,6 +191,23 @@ private fun AppRoot(startLoggedIn: Boolean, player: PlayerConnection) {
     // "Go to album" / "Go to artist" are triggered from a bottom sheet, which
     // has no navigation of its own, so the request comes back through here.
     val actionsViewModel: ActionsViewModel = hiltViewModel()
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    // Firing a share sheet needs an Activity context, which the action layer
+    // has no business holding, so the request is handled here.
+    LaunchedEffect(Unit) {
+        actionsViewModel.actions.share.collect { payload ->
+            val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(android.content.Intent.EXTRA_SUBJECT, payload.title)
+                putExtra(android.content.Intent.EXTRA_TEXT, payload.text)
+            }
+            context.startActivity(
+                android.content.Intent.createChooser(intent, "Share ${payload.title}")
+            )
+        }
+    }
+
     LaunchedEffect(Unit) {
         actionsViewModel.actions.navigation.collect { target ->
             showNowPlaying = false
@@ -308,6 +327,17 @@ private fun AppRoot(startLoggedIn: Boolean, player: PlayerConnection) {
                 onAddToPlaylist = playerViewModel::addCurrentToPlaylist,
                 onStartRadio = playerViewModel::startRadioFromCurrent,
                 onLyricsRequested = { playerViewModel.loadLyrics(playerState.currentItemId) },
+                related = relatedState,
+                isDisliked = playerState.currentItemId in dislikedIds,
+                onToggleDislike = {
+                    playerState.currentItemId?.let(playerViewModel::toggleDislike)
+                },
+                onShare = playerViewModel::shareCurrent,
+                onGoToAlbum = playerViewModel::goToAlbumOfCurrent,
+                onGoToArtist = playerViewModel::goToArtistOfCurrent,
+                onRelatedRequested = { playerViewModel.loadRelated(playerState.currentItemId) },
+                onPlayRelated = playerViewModel::playRelated,
+                artworkFor = playerViewModel::artworkFor,
                 sleepTimerEndsAt = sleepTimerEndsAt,
                 onSetSleepTimer = playerViewModel::setSleepTimer
             )

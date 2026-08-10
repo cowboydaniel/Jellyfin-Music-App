@@ -83,6 +83,23 @@ interface JellyfinApi {
     )
 
     /**
+     * Thumbs rating, which Jellyfin stores separately from favourites: a
+     * favourite is "save this", a rating is "more or less like this".
+     */
+    @POST("Users/{userId}/Items/{itemId}/Rating")
+    suspend fun setRating(
+        @Path("userId") userId: String,
+        @Path("itemId") itemId: String,
+        @Query("likes") likes: Boolean
+    )
+
+    @DELETE("Users/{userId}/Items/{itemId}/Rating")
+    suspend fun clearRating(
+        @Path("userId") userId: String,
+        @Path("itemId") itemId: String
+    )
+
+    /**
      * Playback reporting. Without these the server never increments play counts
      * or records a last-played date, so anything ranked on listening history
      * stays empty no matter how much is played.
