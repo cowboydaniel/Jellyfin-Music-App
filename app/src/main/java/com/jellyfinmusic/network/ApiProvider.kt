@@ -103,6 +103,36 @@ class ApiProvider @Inject constructor(
     }
 
     private var musicBrainzApi: MusicBrainzApi? = null
+    private var spotifyAuthApi: SpotifyAuthApi? = null
+    private var spotifyApi: SpotifyApi? = null
+    private var youTubeApi: YouTubeApi? = null
+
+    @Synchronized
+    fun spotifyAuth(): SpotifyAuthApi = spotifyAuthApi ?: Retrofit.Builder()
+        .baseUrl("https://accounts.spotify.com/")
+        .client(baseClient().build())
+        .addConverterFactory(converter)
+        .build()
+        .create(SpotifyAuthApi::class.java)
+        .also { spotifyAuthApi = it }
+
+    @Synchronized
+    fun spotify(): SpotifyApi = spotifyApi ?: Retrofit.Builder()
+        .baseUrl("https://api.spotify.com/")
+        .client(baseClient().build())
+        .addConverterFactory(converter)
+        .build()
+        .create(SpotifyApi::class.java)
+        .also { spotifyApi = it }
+
+    @Synchronized
+    fun youTube(): YouTubeApi = youTubeApi ?: Retrofit.Builder()
+        .baseUrl("https://www.googleapis.com/")
+        .client(baseClient().build())
+        .addConverterFactory(converter)
+        .build()
+        .create(YouTubeApi::class.java)
+        .also { youTubeApi = it }
 
     /**
      * MusicBrainz is a fixed public endpoint, so this client never needs

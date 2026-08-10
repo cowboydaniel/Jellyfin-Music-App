@@ -47,7 +47,10 @@ class SettingsStore @Inject constructor(context: Context) {
         normalizeVolume = prefs.getBoolean(KEY_NORMALIZE, true),
         playbackSpeed = prefs.getFloat(KEY_SPEED, 1.0f),
         downloadOverWifiOnly = prefs.getBoolean(KEY_WIFI_ONLY, true),
-        smartDownloads = prefs.getBoolean(KEY_SMART_DOWNLOADS, false)
+        smartDownloads = prefs.getBoolean(KEY_SMART_DOWNLOADS, false),
+        spotifyClientId = prefs.getString(KEY_SPOTIFY_ID, "").orEmpty(),
+        spotifyClientSecret = prefs.getString(KEY_SPOTIFY_SECRET, "").orEmpty(),
+        youtubeApiKey = prefs.getString(KEY_YOUTUBE_KEY, "").orEmpty()
     )
 
     private fun publish() {
@@ -130,6 +133,15 @@ class SettingsStore @Inject constructor(context: Context) {
         publish()
     }
 
+    fun saveImportCredentials(spotifyId: String, spotifySecret: String, youtubeKey: String) {
+        prefs.edit()
+            .putString(KEY_SPOTIFY_ID, spotifyId.trim())
+            .putString(KEY_SPOTIFY_SECRET, spotifySecret.trim())
+            .putString(KEY_YOUTUBE_KEY, youtubeKey.trim())
+            .apply()
+        publish()
+    }
+
     fun logout() {
         prefs.edit()
             .remove(KEY_TOKEN)
@@ -156,6 +168,9 @@ class SettingsStore @Inject constructor(context: Context) {
         const val KEY_SPEED = "playback_speed"
         const val KEY_WIFI_ONLY = "download_wifi_only"
         const val KEY_SMART_DOWNLOADS = "smart_downloads"
+        const val KEY_SPOTIFY_ID = "spotify_client_id"
+        const val KEY_SPOTIFY_SECRET = "spotify_client_secret"
+        const val KEY_YOUTUBE_KEY = "youtube_api_key"
         const val MAX_RECENT_SEARCHES = 12
     }
 }
@@ -186,9 +201,14 @@ data class Settings(
     val normalizeVolume: Boolean = true,
     val playbackSpeed: Float = 1.0f,
     val downloadOverWifiOnly: Boolean = true,
-    val smartDownloads: Boolean = false
+    val smartDownloads: Boolean = false,
+    val spotifyClientId: String = "",
+    val spotifyClientSecret: String = "",
+    val youtubeApiKey: String = ""
 ) {
     val isLoggedIn: Boolean get() = jellyfinUrl.isNotBlank() && accessToken.isNotBlank() && userId.isNotBlank()
+    val hasSpotify: Boolean get() = spotifyClientId.isNotBlank() && spotifyClientSecret.isNotBlank()
+    val hasYouTube: Boolean get() = youtubeApiKey.isNotBlank()
     val hasLidarr: Boolean get() = lidarrUrl.isNotBlank() && lidarrApiKey.isNotBlank()
 }
 

@@ -24,6 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Shuffle
@@ -63,7 +64,8 @@ fun LibraryScreen(
     onArtistClick: (BaseItem) -> Unit,
     onPlaylistClick: (BaseItem) -> Unit,
     onLikedSongsClick: () -> Unit,
-    onHistoryClick: () -> Unit
+    onHistoryClick: () -> Unit,
+    onImportClick: () -> Unit
 ) {
     var sortMenuOpen by remember { mutableStateOf(false) }
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -84,6 +86,13 @@ fun LibraryScreen(
                 modifier = Modifier.weight(1f)
             )
             if (state.tab == LibraryTab.PLAYLISTS) {
+                IconButton(onClick = onImportClick) {
+                    Icon(
+                        Icons.Filled.FileDownload,
+                        contentDescription = "Import playlist",
+                        tint = AppColors.OnBackground
+                    )
+                }
                 IconButton(onClick = viewModel::newPlaylist) {
                     Icon(
                         Icons.Filled.Add,

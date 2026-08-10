@@ -43,6 +43,7 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val prefsSnapshot by viewModel.playbackSettings.collectAsStateWithLifecycle()
 
     Column(
         modifier = Modifier
@@ -130,6 +131,43 @@ fun SettingsScreen(
                 }
             }
         }
+
+        HorizontalDivider()
+
+        Text("Playlist import", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "Optional. Spotify needs a free developer app — only the ID and secret, no " +
+                "Spotify login. YouTube needs a Data API key. Both read public playlists only.",
+            style = MaterialTheme.typography.bodySmall,
+            color = AppColors.Secondary
+        )
+        var spotifyId by remember { mutableStateOf(prefsSnapshot.spotifyClientId) }
+        var spotifySecret by remember { mutableStateOf(prefsSnapshot.spotifyClientSecret) }
+        var youtubeKey by remember { mutableStateOf(prefsSnapshot.youtubeApiKey) }
+        OutlinedTextField(
+            value = spotifyId,
+            onValueChange = { spotifyId = it },
+            label = { Text("Spotify client ID") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+        OutlinedTextField(
+            value = spotifySecret,
+            onValueChange = { spotifySecret = it },
+            label = { Text("Spotify client secret") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+        OutlinedTextField(
+            value = youtubeKey,
+            onValueChange = { youtubeKey = it },
+            label = { Text("YouTube API key") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+        OutlinedButton(
+            onClick = { viewModel.saveImportCredentials(spotifyId, spotifySecret, youtubeKey) }
+        ) { Text("Save import credentials") }
 
         HorizontalDivider()
 

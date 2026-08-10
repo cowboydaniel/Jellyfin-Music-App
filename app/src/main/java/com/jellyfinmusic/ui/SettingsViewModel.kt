@@ -63,6 +63,11 @@ class SettingsViewModel @Inject constructor(
 
     fun setSmartDownloads(enabled: Boolean) = settings.setSmartDownloads(enabled)
 
+    fun saveImportCredentials(spotifyId: String, spotifySecret: String, youtubeKey: String) {
+        settings.saveImportCredentials(spotifyId, spotifySecret, youtubeKey)
+        _state.value = _state.value.copy(message = "Import credentials saved")
+    }
+
     fun refreshDownloads() = downloads.refresh()
 
     fun downloadCacheBytes(): Long = downloads.cacheSizeBytes()

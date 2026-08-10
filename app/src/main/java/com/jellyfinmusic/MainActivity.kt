@@ -81,6 +81,7 @@ import com.jellyfinmusic.ui.screens.DownloadsSettingsScreen
 import com.jellyfinmusic.ui.screens.ExploreScreen
 import com.jellyfinmusic.ui.screens.HistoryScreen
 import com.jellyfinmusic.ui.screens.HomeScreen
+import com.jellyfinmusic.ui.screens.ImportScreen
 import com.jellyfinmusic.ui.screens.LibraryScreen
 import com.jellyfinmusic.ui.screens.LikedSongsScreen
 import com.jellyfinmusic.ui.screens.LoginScreen
@@ -157,6 +158,7 @@ private object Routes {
     const val DOWNLOADS_SETTINGS = "downloads_settings"
     const val HISTORY = "history"
     const val RECAP = "recap"
+    const val IMPORT = "import"
 
     fun album(id: String, title: String, isPlaylist: Boolean) =
         "album/$id/${title.encode()}/$isPlaylist"
@@ -453,7 +455,8 @@ private fun NavGraph(
                 onArtistClick = openArtist,
                 onPlaylistClick = openAlbum,
                 onLikedSongsClick = { navController.navigate(Routes.LIKED) },
-                onHistoryClick = { navController.navigate(Routes.HISTORY) }
+                onHistoryClick = { navController.navigate(Routes.HISTORY) },
+                onImportClick = { navController.navigate(Routes.IMPORT) }
             )
         }
 
@@ -477,6 +480,13 @@ private fun NavGraph(
 
         composable(Routes.LIKED) {
             LikedSongsScreen(contentPadding = contentPadding)
+        }
+
+        composable(Routes.IMPORT) {
+            ImportScreen(
+                contentPadding = contentPadding,
+                onDone = { navController.popBackStack() }
+            )
         }
 
         composable(Routes.RECAP) {
@@ -567,5 +577,6 @@ private fun titleFor(route: String?, args: android.os.Bundle?): String = when (r
     Routes.DOWNLOADS_SETTINGS -> "Downloads and storage"
     Routes.HISTORY -> "History"
     Routes.RECAP -> "Your listening"
+    Routes.IMPORT -> "Import playlist"
     else -> "Jellyfin Music"
 }
