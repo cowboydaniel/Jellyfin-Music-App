@@ -8,8 +8,15 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
+import androidx.media3.session.CommandButton
+import androidx.media3.session.LibraryResult
+import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
-import androidx.media3.session.MediaSessionService
+import com.google.common.collect.ImmutableList
+import com.google.common.util.concurrent.Futures
+import com.google.common.util.concurrent.ListenableFuture
 import com.jellyfinmusic.MainActivity
 import com.jellyfinmusic.data.JellyfinRepository
 import com.jellyfinmusic.data.PlaybackReporter
@@ -17,6 +24,7 @@ import com.jellyfinmusic.data.PlaybackStateStore
 import com.jellyfinmusic.data.SavedQueue
 import com.jellyfinmusic.data.SavedTrack
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
@@ -31,7 +39,7 @@ import javax.inject.Inject
  * resumes on the same track at the same position.
  */
 @AndroidEntryPoint
-class MusicService : MediaSessionService() {
+class MusicService : MediaLibraryService() {
 
     @Inject lateinit var playbackState: PlaybackStateStore
 
@@ -41,7 +49,10 @@ class MusicService : MediaSessionService() {
 
     @Inject lateinit var cacheDataSourceFactory: androidx.media3.datasource.cache.CacheDataSource.Factory
 
-    private var mediaSession: MediaSession? = null
+    private var mediaSession: MediaLibrarySession? = null
+
+    private val serviceScope =
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main)
 
     private val handler = Handler(Looper.getMainLooper())
 
@@ -129,7 +140,7 @@ class MusicService : MediaSessionService() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        mediaSession = MediaSession.Builder(this, player)
+        mediaSession = MediaLibrarySession.Builder(this, player, LibraryCallback())
             .setSessionActivity(sessionActivity)
             .build()
 
@@ -138,7 +149,169 @@ class MusicService : MediaSessionService() {
         handler.postDelayed(positionSaver, SAVE_INTERVAL_MS)
     }
 
-    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
+    override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? =
+        mediaSession
+
+    /**
+     * Exposes the library as a browsable tree, which is what Android Auto and
+     * other media browsers navigate. Everything is fetched on demand; nothing
+     * is cached here beyond what the repository already holds.
+     */
+    private inner class LibraryCallback : MediaLibrarySession.Callback {
+
+        override fun onGetLibraryRoot(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            params: LibraryParams?
+        ): ListenableFuture<LibraryResult<MediaItem>> =
+            Futures.immediateFuture(
+                LibraryResult.ofItem(browsableItem(ROOT_ID, "Jellyfin Music"), params)
+            )
+
+        override fun onGetChildren(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            parentId: String,
+            page: Int,
+            pageSize: Int,
+            params: LibraryParams?
+        ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
+            val future = com.google.common.util.concurrent.SettableFuture
+                .create<LibraryResult<ImmutableList<MediaItem>>>()
+            serviceScope.launch {
+                val children = runCatching { childrenOf(parentId) }.getOrDefault(emptyList())
+                future.set(LibraryResult.ofItemList(ImmutableList.copyOf(children), params))
+            }
+            return future
+        }
+
+        override fun onGetItem(
+            session: MediaLibrarySession,
+            browser: MediaSession.ControllerInfo,
+            mediaId: String
+        ): ListenableFuture<LibraryResult<MediaItem>> {
+            val future = com.google.common.util.concurrent.SettableFuture
+                .create<LibraryResult<MediaItem>>()
+            serviceScope.launch {
+                val item = runCatching { repo.itemById(mediaId) }.getOrNull()
+                future.set(
+                    if (item == null) {
+                        LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE)
+                    } else {
+                        LibraryResult.ofItem(item.toPlayableMediaItem(), null)
+                    }
+                )
+            }
+            return future
+        }
+
+        /**
+         * A browser hands back the item it wants played; the queue is filled
+         * from its siblings so skipping works in the car.
+         */
+        override fun onSetMediaItems(
+            mediaSession: MediaSession,
+            controller: MediaSession.ControllerInfo,
+            mediaItems: MutableList<MediaItem>,
+            startIndex: Int,
+            startPositionMs: Long
+        ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
+            val future = com.google.common.util.concurrent.SettableFuture
+                .create<MediaSession.MediaItemsWithStartPosition>()
+            serviceScope.launch {
+                val resolved = mediaItems.map { requested ->
+                    val existing = requested.localConfiguration?.uri
+                    if (existing != null) {
+                        requested
+                    } else {
+                        // Browser items carry only an ID, so the stream URL is
+                        // attached before handing them to the player.
+                        val item = runCatching { repo.itemById(requested.mediaId) }.getOrNull()
+                        item?.toPlayableMediaItem() ?: requested
+                    }
+                }
+                future.set(
+                    MediaSession.MediaItemsWithStartPosition(
+                        resolved,
+                        startIndex,
+                        startPositionMs
+                    )
+                )
+            }
+            return future
+        }
+    }
+
+    private suspend fun childrenOf(parentId: String): List<MediaItem> = when {
+        parentId == ROOT_ID -> listOf(
+            browsableItem(NODE_PLAYLISTS, "Playlists"),
+            browsableItem(NODE_ALBUMS, "Albums"),
+            browsableItem(NODE_ARTISTS, "Artists"),
+            browsableItem(NODE_LIKED, "Liked songs")
+        )
+
+        parentId == NODE_PLAYLISTS -> repo.playlists().map { it.toBrowsableItem() }
+        parentId == NODE_ALBUMS -> repo.allAlbums(limit = 200).map { it.toBrowsableItem() }
+        parentId == NODE_ARTISTS -> repo.topArtists(limit = 200).map { it.toBrowsableItem() }
+        parentId == NODE_LIKED -> repo.favoriteSongs().map { it.toPlayableMediaItem() }
+
+        parentId.startsWith(PREFIX_PLAYLIST) ->
+            repo.playlistTracks(parentId.removePrefix(PREFIX_PLAYLIST))
+                .map { it.toPlayableMediaItem() }
+
+        parentId.startsWith(PREFIX_ALBUM) ->
+            repo.tracksOfAlbum(parentId.removePrefix(PREFIX_ALBUM))
+                .map { it.toPlayableMediaItem() }
+
+        parentId.startsWith(PREFIX_ARTIST) ->
+            repo.albumsOfArtist(parentId.removePrefix(PREFIX_ARTIST))
+                .map { it.toBrowsableItem() }
+
+        else -> emptyList()
+    }
+
+    private fun browsableItem(id: String, title: String): MediaItem = MediaItem.Builder()
+        .setMediaId(id)
+        .setMediaMetadata(
+            MediaMetadata.Builder()
+                .setTitle(title)
+                .setIsBrowsable(true)
+                .setIsPlayable(false)
+                .setMediaType(MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
+                .build()
+        )
+        .build()
+
+    private fun com.jellyfinmusic.network.BaseItem.toBrowsableItem(): MediaItem {
+        val prefix = when (type) {
+            "Playlist" -> PREFIX_PLAYLIST
+            "MusicArtist" -> PREFIX_ARTIST
+            else -> PREFIX_ALBUM
+        }
+        return MediaItem.Builder()
+            .setMediaId(prefix + id)
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(name.orEmpty())
+                    .setSubtitle(artistName.orEmpty())
+                    .setArtworkUri(repo.artworkFor(this)?.let(android.net.Uri::parse))
+                    .setIsBrowsable(true)
+                    .setIsPlayable(false)
+                    .setMediaType(MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
+                    .build()
+            )
+            .build()
+    }
+
+    private fun com.jellyfinmusic.network.BaseItem.toPlayableMediaItem(): MediaItem =
+        PlayableTrack(
+            id = id,
+            title = name.orEmpty(),
+            artist = artistName.orEmpty(),
+            album = album.orEmpty(),
+            streamUrl = repo.streamUrl(id),
+            artworkUrl = repo.artworkFor(this)
+        ).toMediaItem()
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         saveState()
@@ -221,5 +394,13 @@ class MusicService : MediaSessionService() {
 
     private companion object {
         const val SAVE_INTERVAL_MS = 5_000L
+        const val ROOT_ID = "root"
+        const val NODE_PLAYLISTS = "node_playlists"
+        const val NODE_ALBUMS = "node_albums"
+        const val NODE_ARTISTS = "node_artists"
+        const val NODE_LIKED = "node_liked"
+        const val PREFIX_PLAYLIST = "playlist:"
+        const val PREFIX_ALBUM = "album:"
+        const val PREFIX_ARTIST = "artist:"
     }
 }
