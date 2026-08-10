@@ -1,7 +1,9 @@
 package com.jellyfinmusic.ui.screens
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -78,6 +80,7 @@ private enum class PlayerTab(val label: String) {
     RELATED("RELATED")
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun NowPlayingScreen(
     state: PlayerUiState,
@@ -148,7 +151,7 @@ fun NowPlayingScreen(
                         state.album.ifBlank { "Your library" },
                         style = MaterialTheme.typography.labelLarge,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE)
                     )
                 }
                 CircleIcon(Icons.Filled.MoreVert, "More", onClick = onShowMenu)
@@ -183,15 +186,18 @@ fun NowPlayingScreen(
                         state.title,
                         style = MaterialTheme.typography.titleLarge,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        // Long titles scroll rather than truncate, so the whole
+                        // name is readable without opening the track menu.
+                        modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE)
                     )
                     Text(
                         state.artist,
                         style = MaterialTheme.typography.bodyMedium,
                         color = AppColors.Secondary,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(top = 2.dp)
+                        modifier = Modifier
+                            .padding(top = 2.dp)
+                            .basicMarquee(iterations = Int.MAX_VALUE)
                     )
                 }
                 CircleIcon(

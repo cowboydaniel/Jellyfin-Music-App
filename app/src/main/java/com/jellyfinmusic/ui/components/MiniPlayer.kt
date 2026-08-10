@@ -1,7 +1,9 @@
 package com.jellyfinmusic.ui.components
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
@@ -35,6 +37,7 @@ import com.jellyfinmusic.ui.theme.AppColors
  * The floating bar that sits above the navigation bar. Tapping or swiping up
  * opens the full player; a hairline progress bar runs along the bottom edge.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MiniPlayer(
     state: PlayerUiState,
@@ -79,7 +82,7 @@ fun MiniPlayer(
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE)
                 )
                 Text(
                     state.artist,
