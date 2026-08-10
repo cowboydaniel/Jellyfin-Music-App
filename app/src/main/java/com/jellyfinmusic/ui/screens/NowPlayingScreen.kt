@@ -288,7 +288,7 @@ fun NowPlayingScreen(
             // returns to the artwork.
             Row(
                 Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(28.dp)
+                horizontalArrangement = Arrangement.spacedBy(32.dp, Alignment.CenterHorizontally)
             ) {
                 PlayerTab.entries.forEach { entry ->
                     val selected = panelOpen && tab == entry
