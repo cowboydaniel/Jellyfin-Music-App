@@ -59,7 +59,8 @@ data class PlaylistContext(val playlistId: String, val playlistItemId: String?)
 class ActionsController @Inject constructor(
     private val repo: JellyfinRepository,
     private val player: PlayerConnection,
-    private val downloads: DownloadsController
+    private val downloads: DownloadsController,
+    private val dismissed: DismissedStore
 ) {
     private val scope = CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate)
 
@@ -105,6 +106,13 @@ class ActionsController @Inject constructor(
     }
 
     fun toggleDislike(item: BaseItem) = toggleDislikeById(item.id)
+
+    /** Hides an item from the Home shelves. Local only — Jellyfin has no such flag. */
+    fun notInterested(item: BaseItem) {
+        dismissed.dismiss(item.id)
+        dismissSheet()
+        _toast.value = "Hidden from Home"
+    }
 
     fun toggleDislikeById(itemId: String) {
         scope.launch {
@@ -197,6 +205,11 @@ class ActionsController @Inject constructor(
 
     fun dismissSheet() {
         _sheet.value = ActionSheet.None
+    }
+
+    /** Shows a message through the shared snackbar. */
+    fun notify(message: String) {
+        _toast.value = message
     }
 
     fun consumeToast() {

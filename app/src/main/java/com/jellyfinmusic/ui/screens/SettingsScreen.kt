@@ -38,6 +38,7 @@ import com.jellyfinmusic.ui.theme.AppColors
 fun SettingsScreen(
     contentPadding: PaddingValues,
     onOpenDownloads: () -> Unit,
+    onOpenRecap: () -> Unit,
     onLoggedOut: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
@@ -182,6 +183,16 @@ fun SettingsScreen(
                 }
             }
         }
+
+        HorizontalDivider()
+
+        Text(
+            "Your listening",
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onOpenRecap)
+                .padding(vertical = 16.dp)
+        )
 
         HorizontalDivider()
 

@@ -78,6 +78,9 @@ data class UserItemData(
     /** Thumbs rating: true up, false down, absent for no opinion. */
     @SerialName("Likes") val likes: Boolean? = null,
     @SerialName("Played") val played: Boolean = false,
+    /** How far through the user is, 0–100; non-zero means partially played. */
+    @SerialName("PlayedPercentage") val playedPercentage: Double? = null,
+    @SerialName("PlaybackPositionTicks") val playbackPositionTicks: Long = 0L,
     @SerialName("PlayCount") val playCount: Int = 0
 )
 

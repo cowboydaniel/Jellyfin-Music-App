@@ -85,6 +85,7 @@ import com.jellyfinmusic.ui.screens.LibraryScreen
 import com.jellyfinmusic.ui.screens.LikedSongsScreen
 import com.jellyfinmusic.ui.screens.LoginScreen
 import com.jellyfinmusic.ui.screens.NowPlayingScreen
+import com.jellyfinmusic.ui.screens.RecapScreen
 import com.jellyfinmusic.ui.screens.SearchScreen
 import com.jellyfinmusic.ui.screens.SettingsScreen
 import com.jellyfinmusic.ui.theme.AppColors
@@ -155,6 +156,7 @@ private object Routes {
     const val LIKED = "liked"
     const val DOWNLOADS_SETTINGS = "downloads_settings"
     const val HISTORY = "history"
+    const val RECAP = "recap"
 
     fun album(id: String, title: String, isPlaylist: Boolean) =
         "album/$id/${title.encode()}/$isPlaylist"
@@ -477,6 +479,10 @@ private fun NavGraph(
             LikedSongsScreen(contentPadding = contentPadding)
         }
 
+        composable(Routes.RECAP) {
+            RecapScreen(contentPadding = contentPadding)
+        }
+
         composable(Routes.HISTORY) {
             HistoryScreen(contentPadding = contentPadding)
         }
@@ -498,6 +504,7 @@ private fun NavGraph(
             SettingsScreen(
                 contentPadding = contentPadding,
                 onOpenDownloads = { navController.navigate(Routes.DOWNLOADS_SETTINGS) },
+                onOpenRecap = { navController.navigate(Routes.RECAP) },
                 onLoggedOut = {
                     navController.navigate(Routes.LOGIN) {
                         popUpTo(0) { inclusive = true }
@@ -559,5 +566,6 @@ private fun titleFor(route: String?, args: android.os.Bundle?): String = when (r
     Routes.LIKED -> "Liked songs"
     Routes.DOWNLOADS_SETTINGS -> "Downloads and storage"
     Routes.HISTORY -> "History"
+    Routes.RECAP -> "Your listening"
     else -> "Jellyfin Music"
 }

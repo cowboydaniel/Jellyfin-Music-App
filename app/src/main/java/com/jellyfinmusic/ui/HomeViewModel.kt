@@ -17,6 +17,11 @@ import javax.inject.Inject
 
 data class HomeUiState(
     val greeting: String = "",
+    /** The 3x3 paged grid at the top: recent albums, artists and playlists. */
+    val speedDial: List<BaseItem> = emptyList(),
+    val moods: List<BaseItem> = emptyList(),
+    val continueListening: List<BaseItem> = emptyList(),
+    val topSongs: List<BaseItem> = emptyList(),
     val quickPicks: List<BaseItem> = emptyList(),
     val listenAgain: List<BaseItem> = emptyList(),
     val newReleases: List<BaseItem> = emptyList(),
@@ -33,12 +38,34 @@ class HomeViewModel @Inject constructor(
     private val player: PlayerConnection,
     private val settings: SettingsStore,
     private val actions: ActionsController,
-    private val downloads: com.jellyfinmusic.data.DownloadsController
+    private val downloads: com.jellyfinmusic.data.DownloadsController,
+    private val dismissed: com.jellyfinmusic.data.DismissedStore
 ) : ViewModel() {
 
     val favoriteIds = repo.favoriteIds
 
     fun showMenu(item: BaseItem) = actions.showTrackMenu(item)
+
+    val dismissedIds = dismissed.ids
+
+    fun dismiss(item: BaseItem) {
+        dismissed.dismiss(item.id)
+        actions.notify("Hidden from Home")
+    }
+
+    /** Radio built from a mood: a shuffled run through one genre. */
+    fun startGenreRadio(genre: BaseItem) {
+        val name = genre.name ?: return
+        viewModelScope.launch {
+            val tracks = runCatching { repo.tracksInGenre(name) }.getOrDefault(emptyList())
+            if (tracks.isEmpty()) {
+                actions.notify("Nothing in ${'$'}name yet")
+                return@launch
+            }
+            player.playQueue(tracks.toPlayable(repo), 0)
+            actions.notify("Playing ${'$'}name")
+        }
+    }
 
     fun toggleFavorite(item: BaseItem) = actions.toggleFavorite(item)
 
@@ -61,24 +88,40 @@ class HomeViewModel @Inject constructor(
                     // Each shelf is independent, so they are fetched together and
                     // a failure in one is allowed to leave that shelf empty rather
                     // than blanking the whole screen.
-                    val topSongs = async { orEmpty { repo.topSongs(40) } }
+                    val topSongsAsync = async { orEmpty { repo.topSongs(40) } }
                     val listenAgain = async { orEmpty { repo.recentlyPlayedAlbums(20) } }
                     val newReleases = async { orEmpty { repo.latestAlbums(20) } }
                     val playlists = async { orEmpty { repo.playlists() } }
                     val artists = async { orEmpty { repo.topArtists(20) } }
+                    val moods = async { orEmpty { repo.genres() } }
+                    val resumable = async { orEmpty { repo.partiallyPlayedAlbums(12) } }
 
-                    var picks = topSongs.await()
+                    var picks = topSongsAsync.await()
                     // A library that has never been played reports no top songs,
                     // so fall back to a random selection to keep Home populated.
                     if (picks.isEmpty()) picks = orEmpty { repo.randomSongs(40) }
 
+                    val recentAlbums = listenAgain.await()
+                    val allPlaylists = playlists.await()
+                    val allArtists = artists.await()
+
+                    // Speed dial mixes the shapes the way YouTube Music does:
+                    // whatever you have been near lately, regardless of type.
+                    val dial = (recentAlbums + allPlaylists.take(6) + allArtists.take(6))
+                        .distinctBy { it.id }
+                        .take(SPEED_DIAL_SIZE)
+
                     HomeUiState(
                         greeting = greeting(),
+                        speedDial = dial,
+                        moods = moods.await().take(12),
+                        continueListening = resumable.await(),
+                        topSongs = picks.take(20),
                         quickPicks = picks,
-                        listenAgain = listenAgain.await(),
+                        listenAgain = recentAlbums,
                         newReleases = newReleases.await(),
-                        playlists = playlists.await(),
-                        artists = artists.await(),
+                        playlists = allPlaylists,
+                        artists = allArtists,
                         isLoading = false
                     )
                 }
@@ -105,6 +148,12 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    fun playTopSong(index: Int) {
+        val songs = _state.value.topSongs
+        if (songs.isEmpty()) return
+        player.playQueue(songs.toPlayable(repo), index)
+    }
+
     fun playQuickPicks(index: Int) {
         val picks = _state.value.quickPicks
         if (picks.isEmpty()) return
@@ -127,6 +176,10 @@ class HomeViewModel @Inject constructor(
 
     private suspend fun orEmpty(block: suspend () -> List<BaseItem>): List<BaseItem> =
         runCatching { block() }.getOrDefault(emptyList())
+
+    private companion object {
+        const val SPEED_DIAL_SIZE = 27
+    }
 
     private fun greeting(): String {
         val name = settings.current.username

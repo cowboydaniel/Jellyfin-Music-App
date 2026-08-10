@@ -141,6 +141,44 @@ class JellyfinRepository @Inject constructor(
         limit = limit
     ).items.also { noteFavorites(it) }
 
+    /**
+     * Albums started but not finished — the "pick up where you left off" shelf.
+     * Jellyfin reports progress per album as a percentage, so anything strictly
+     * between untouched and complete qualifies.
+     */
+    suspend fun partiallyPlayedAlbums(limit: Int = 20): List<BaseItem> = apis.jellyfin().getItems(
+        userId = userId(),
+        includeItemTypes = "MusicAlbum",
+        sortBy = "DatePlayed",
+        sortOrder = "Descending",
+        filters = "IsResumable",
+        limit = limit
+    ).items.ifEmpty {
+        // Older servers do not treat albums as resumable, so fall back to
+        // filtering played albums on their reported percentage.
+        apis.jellyfin().getItems(
+            userId = userId(),
+            includeItemTypes = "MusicAlbum",
+            sortBy = "DatePlayed",
+            sortOrder = "Descending",
+            filters = "IsPlayed",
+            limit = 60
+        ).items.filter {
+            val pct = it.userData?.playedPercentage ?: 0.0
+            pct > 1.0 && pct < 99.0
+        }.take(limit)
+    }
+
+    /** Tracks with a saved position, so playback can resume mid-song. */
+    suspend fun resumableSongs(limit: Int = 20): List<BaseItem> = apis.jellyfin().getItems(
+        userId = userId(),
+        includeItemTypes = "Audio",
+        sortBy = "DatePlayed",
+        sortOrder = "Descending",
+        filters = "IsResumable",
+        limit = limit
+    ).items.also { noteFavorites(it) }
+
     /** Most recently played tracks — the source list for smart downloads. */
     suspend fun recentlyPlayedSongs(limit: Int = 50): List<BaseItem> = apis.jellyfin().getItems(
         userId = userId(),
@@ -227,6 +265,16 @@ class JellyfinRepository @Inject constructor(
     /** Server-generated radio seeded from a track, album or artist. */
     suspend fun instantMix(itemId: String): List<BaseItem> =
         apis.jellyfin().getInstantMix(itemId, userId()).items
+
+    /** A shuffled run of tracks in one genre — the seed for a built radio. */
+    suspend fun tracksInGenre(genre: String, limit: Int = 80): List<BaseItem> =
+        apis.jellyfin().getItems(
+            userId = userId(),
+            includeItemTypes = "Audio",
+            genres = genre,
+            sortBy = "Random",
+            limit = limit
+        ).items.also { noteFavorites(it) }
 
     // ---- Favourites -------------------------------------------------------
 

@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.ThumbDown
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
@@ -134,6 +135,7 @@ fun ActionSheetHost(
                     viewModel.actions.dismissSheet()
                 },
                 onShare = { viewModel.actions.shareItem(current.item) },
+                onNotInterested = { viewModel.actions.notInterested(current.item) },
                 onGoToAlbum = { viewModel.actions.goToAlbum(current.item) },
                 onGoToArtist = { viewModel.actions.goToArtist(current.item) },
                 onRemoveFromPlaylist = {
@@ -202,6 +204,7 @@ private fun TrackMenuSheet(
     onShare: () -> Unit,
     onGoToAlbum: () -> Unit,
     onGoToArtist: () -> Unit,
+    onNotInterested: () -> Unit,
     onRemoveFromPlaylist: () -> Unit
 ) {
     Column(Modifier.padding(bottom = 24.dp)) {
@@ -294,6 +297,7 @@ private fun TrackMenuSheet(
         SheetAction(Icons.AutoMirrored.Filled.QueueMusic, "Add to queue", onClick = onAddToQueue)
         SheetAction(Icons.Filled.Album, "Go to album", onClick = onGoToAlbum)
         SheetAction(Icons.Filled.Person, "Go to artist", onClick = onGoToArtist)
+        SheetAction(Icons.Filled.VisibilityOff, "Not interested", onClick = onNotInterested)
         if (canRemoveFromPlaylist) {
             SheetAction(
                 Icons.Filled.Delete,
