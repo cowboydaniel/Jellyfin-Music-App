@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.jellyfinmusic.data.ActionsController
 import com.jellyfinmusic.data.JellyfinRepository
 import com.jellyfinmusic.data.LidarrRepository
+import com.jellyfinmusic.data.PlaybackStateStore
 import com.jellyfinmusic.data.SettingsStore
 import com.jellyfinmusic.network.LidarrProfile
 import com.jellyfinmusic.network.LidarrRootFolder
@@ -35,7 +36,8 @@ class SettingsViewModel @Inject constructor(
     private val settings: SettingsStore,
     private val lidarr: LidarrRepository,
     private val jellyfin: JellyfinRepository,
-    private val actions: ActionsController
+    private val actions: ActionsController,
+    private val playbackState: PlaybackStateStore
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(
@@ -115,6 +117,7 @@ class SettingsViewModel @Inject constructor(
         // someone else starts from a clean slate.
         jellyfin.clearUserState()
         actions.clearUserState()
+        playbackState.clear()
         settings.logout()
     }
 }

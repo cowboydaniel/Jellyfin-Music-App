@@ -1,6 +1,7 @@
 package com.jellyfinmusic.di
 
 import android.content.Context
+import com.jellyfinmusic.data.PlaybackStateStore
 import com.jellyfinmusic.data.SettingsStore
 import com.jellyfinmusic.playback.PlayerConnection
 import dagger.Module
@@ -18,6 +19,11 @@ object AppModule {
     @Singleton
     fun provideSettingsStore(@ApplicationContext context: Context): SettingsStore =
         SettingsStore(context)
+
+    @Provides
+    @Singleton
+    fun providePlaybackStateStore(@ApplicationContext context: Context): PlaybackStateStore =
+        PlaybackStateStore(context)
 
     @Provides
     @Singleton
