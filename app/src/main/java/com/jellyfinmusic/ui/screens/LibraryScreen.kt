@@ -1,6 +1,10 @@
 package com.jellyfinmusic.ui.screens
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -17,14 +21,20 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.jellyfinmusic.network.BaseItem
@@ -44,9 +54,11 @@ fun LibraryScreen(
     contentPadding: PaddingValues,
     onAlbumClick: (BaseItem) -> Unit,
     onArtistClick: (BaseItem) -> Unit,
-    onPlaylistClick: (BaseItem) -> Unit
+    onPlaylistClick: (BaseItem) -> Unit,
+    onLikedSongsClick: () -> Unit
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val favorites by viewModel.favoriteIds.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { viewModel.loadOnce() }
 
     Column(
@@ -61,6 +73,15 @@ fun LibraryScreen(
                 onSelect = { viewModel.select(LibraryTab.fromLabel(it)) },
                 modifier = Modifier.weight(1f)
             )
+            if (state.tab == LibraryTab.PLAYLISTS) {
+                IconButton(onClick = viewModel::newPlaylist) {
+                    Icon(
+                        Icons.Filled.Add,
+                        contentDescription = "New playlist",
+                        tint = AppColors.OnBackground
+                    )
+                }
+            }
             IconButton(onClick = viewModel::toggleLayout) {
                 Icon(
                     if (state.isGrid) Icons.AutoMirrored.Filled.List else Icons.Filled.GridView,
@@ -86,6 +107,9 @@ fun LibraryScreen(
                     Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(top = 8.dp, bottom = bottom)
                 ) {
+                    if (state.tab == LibraryTab.PLAYLISTS) {
+                        item { LikedSongsRow(onClick = onLikedSongsClick) }
+                    }
                     itemsIndexed(state.items, key = { _, it -> it.id }) { index, item ->
                         TrackRow(
                             title = item.name.orEmpty(),
@@ -93,7 +117,18 @@ fun LibraryScreen(
                             artworkUrl = viewModel.imageUrl(item),
                             onClick = { onItemClick(item, state.tab, onAlbumClick, onArtistClick, onPlaylistClick) { viewModel.playSongs(index) } },
                             isArtist = state.tab == LibraryTab.ARTISTS,
-                            artShape = if (state.tab == LibraryTab.ARTISTS) CircleShape else androidx.compose.foundation.shape.RoundedCornerShape(4.dp)
+                            artShape = if (state.tab == LibraryTab.ARTISTS) CircleShape else androidx.compose.foundation.shape.RoundedCornerShape(4.dp),
+                            isFavorite = item.id in favorites,
+                            onFavoriteClick = if (state.tab == LibraryTab.SONGS) {
+                                { viewModel.toggleFavorite(item) }
+                            } else {
+                                null
+                            },
+                            onMenuClick = if (state.tab == LibraryTab.SONGS) {
+                                { viewModel.showMenu(item) }
+                            } else {
+                                null
+                            }
                         )
                     }
                 }
@@ -105,6 +140,9 @@ fun LibraryScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
+                    if (state.tab == LibraryTab.PLAYLISTS) {
+                        item { LikedSongsCard(onClick = onLikedSongsClick) }
+                    }
                     items(state.items, key = { it.id }) { item ->
                         if (state.tab == LibraryTab.ARTISTS) {
                             Box(Modifier.fillMaxWidth(), androidx.compose.ui.Alignment.Center) {
@@ -157,5 +195,66 @@ private inline fun onItemClick(
         LibraryTab.ALBUMS -> onAlbumClick(item)
         LibraryTab.ARTISTS -> onArtistClick(item)
         LibraryTab.SONGS -> onSongClick()
+    }
+}
+
+/** Pinned entry that opens the favourites view, styled like a playlist. */
+@Composable
+private fun LikedSongsRow(onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+    ) {
+        Box(
+            Modifier
+                .size(48.dp)
+                .clip(androidx.compose.foundation.shape.RoundedCornerShape(4.dp))
+                .background(
+                    Brush.linearGradient(listOf(Color(0xFF7B2FF7), Color(0xFFF107A3)))
+                ),
+            contentAlignment = androidx.compose.ui.Alignment.Center
+        ) {
+            Icon(Icons.Filled.Favorite, contentDescription = null, tint = Color.White)
+        }
+        Column(Modifier.padding(start = 12.dp)) {
+            Text("Liked songs")
+            Text(
+                "Auto playlist",
+                style = MaterialTheme.typography.bodySmall,
+                color = AppColors.Secondary
+            )
+        }
+    }
+}
+
+@Composable
+private fun LikedSongsCard(onClick: () -> Unit) {
+    Column(Modifier.clickable(onClick = onClick)) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f)
+                .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+                .background(
+                    Brush.linearGradient(listOf(Color(0xFF7B2FF7), Color(0xFFF107A3)))
+                ),
+            contentAlignment = androidx.compose.ui.Alignment.Center
+        ) {
+            Icon(
+                Icons.Filled.Favorite,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(48.dp)
+            )
+        }
+        Text("Liked songs", modifier = Modifier.padding(top = 8.dp))
+        Text(
+            "Auto playlist",
+            style = MaterialTheme.typography.bodySmall,
+            color = AppColors.Secondary
+        )
     }
 }

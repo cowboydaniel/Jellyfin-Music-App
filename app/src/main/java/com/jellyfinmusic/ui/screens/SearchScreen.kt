@@ -63,6 +63,7 @@ fun SearchScreen(
     viewModel: SearchViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val favorites by viewModel.favoriteIds.collectAsStateWithLifecycle()
     val keyboard = LocalSoftwareKeyboardController.current
     LaunchedEffect(Unit) { viewModel.refreshConfigFlag() }
 
@@ -196,7 +197,10 @@ fun SearchScreen(
                             formatDuration(song.durationMs)
                         ).joinToString(" · "),
                         artworkUrl = viewModel.imageUrl(song),
-                        onClick = { viewModel.playSong(index) }
+                        onClick = { viewModel.playSong(index) },
+                        onMenuClick = { viewModel.showMenu(song) },
+                        isFavorite = song.id in favorites,
+                        onFavoriteClick = { viewModel.toggleFavorite(song) }
                     )
                 }
             }

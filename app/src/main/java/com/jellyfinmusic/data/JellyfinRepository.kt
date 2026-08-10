@@ -3,6 +3,10 @@ package com.jellyfinmusic.data
 import com.jellyfinmusic.network.ApiProvider
 import com.jellyfinmusic.network.AuthenticateRequest
 import com.jellyfinmusic.network.BaseItem
+import com.jellyfinmusic.network.CreatePlaylistRequest
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -44,16 +48,29 @@ class JellyfinRepository @Inject constructor(
         includeItemTypes = "Audio",
         parentId = albumId,
         sortBy = "ParentIndexNumber,IndexNumber,SortName"
-    ).items
+    ).items.also { noteFavorites(it) }
 
-    suspend fun playlists(): List<BaseItem> = apis.jellyfin().getItems(
-        userId = userId(),
-        includeItemTypes = "Playlist",
-        sortBy = "SortName"
-    ).items
+    /**
+     * Playlists belonging to the signed-in user.
+     *
+     * Jellyfin stores playlists in a library folder that every user can see, so
+     * the server's own response can include other people's playlists. From
+     * 10.9 each playlist carries an OwnerUserId, which is used here to keep the
+     * list personal. Servers that omit the field cannot be filtered on — those
+     * entries are left in rather than hidden, since dropping them would empty
+     * the tab on older installs.
+     */
+    suspend fun playlists(): List<BaseItem> {
+        val me = userId()
+        return apis.jellyfin().getItems(
+            userId = me,
+            includeItemTypes = "Playlist",
+            sortBy = "SortName"
+        ).items.filter { it.ownerUserId == null || it.ownerUserId == me }
+    }
 
     suspend fun playlistTracks(playlistId: String): List<BaseItem> =
-        apis.jellyfin().getPlaylistItems(playlistId, userId()).items
+        apis.jellyfin().getPlaylistItems(playlistId, userId()).items.also { noteFavorites(it) }
 
     suspend fun allAlbums(limit: Int? = null): List<BaseItem> = apis.jellyfin().getItems(
         userId = userId(),
@@ -95,7 +112,7 @@ class JellyfinRepository @Inject constructor(
         sortBy = "PlayCount",
         sortOrder = "Descending",
         limit = limit
-    ).items
+    ).items.also { noteFavorites(it) }
 
     /** Random tracks, used to fill Quick picks on a library with no play history. */
     suspend fun randomSongs(limit: Int = 40): List<BaseItem> = apis.jellyfin().getItems(
@@ -132,6 +149,99 @@ class JellyfinRepository @Inject constructor(
     /** Server-generated radio seeded from a track, album or artist. */
     suspend fun instantMix(itemId: String): List<BaseItem> =
         apis.jellyfin().getInstantMix(itemId, userId()).items
+
+    // ---- Favourites -------------------------------------------------------
+
+    private val _favoriteIds = MutableStateFlow<Set<String>>(emptySet())
+
+    /**
+     * Locally mirrored favourite state. Every list load folds its items in, and
+     * toggles apply here first, so a tapped heart fills in immediately and stays
+     * consistent across every screen showing that track.
+     */
+    val favoriteIds: StateFlow<Set<String>> = _favoriteIds.asStateFlow()
+
+    fun noteFavorites(items: List<BaseItem>) {
+        if (items.isEmpty()) return
+        val favorites = items.filter { it.isFavorite }.map { it.id }
+        val known = items.map { it.id }.toSet()
+        _favoriteIds.value = _favoriteIds.value
+            // Items reported as not-favourite clear any stale local entry.
+            .filterNot { it in known }
+            .toSet() + favorites
+    }
+
+    fun isFavorite(itemId: String): Boolean = itemId in _favoriteIds.value
+
+    /**
+     * Drops everything cached about the signed-in user. Called on sign-out so a
+     * second account never sees the first one's likes.
+     */
+    fun clearUserState() {
+        _favoriteIds.value = emptySet()
+    }
+
+    /** Optimistic toggle; the local state is rolled back if the server refuses. */
+    suspend fun toggleFavorite(itemId: String): Result<Boolean> {
+        val wasFavorite = isFavorite(itemId)
+        setLocalFavorite(itemId, !wasFavorite)
+        return runCatching {
+            if (wasFavorite) {
+                apis.jellyfin().unmarkFavorite(userId(), itemId)
+            } else {
+                apis.jellyfin().markFavorite(userId(), itemId)
+            }
+            !wasFavorite
+        }.onFailure { setLocalFavorite(itemId, wasFavorite) }
+    }
+
+    private fun setLocalFavorite(itemId: String, favorite: Boolean) {
+        _favoriteIds.value = if (favorite) {
+            _favoriteIds.value + itemId
+        } else {
+            _favoriteIds.value - itemId
+        }
+    }
+
+    suspend fun favoriteSongs(): List<BaseItem> = apis.jellyfin().getItems(
+        userId = userId(),
+        includeItemTypes = "Audio",
+        filters = "IsFavorite",
+        sortBy = "SortName"
+    ).items.also { noteFavorites(it) }
+
+    suspend fun favoriteAlbums(limit: Int = 20): List<BaseItem> = apis.jellyfin().getItems(
+        userId = userId(),
+        includeItemTypes = "MusicAlbum",
+        filters = "IsFavorite",
+        sortBy = "SortName",
+        limit = limit
+    ).items
+
+    // ---- Playlists --------------------------------------------------------
+
+    /** Creates a playlist, optionally seeded with tracks, and returns its ID. */
+    suspend fun createPlaylist(name: String, trackIds: List<String> = emptyList()): String =
+        apis.jellyfin().createPlaylist(
+            CreatePlaylistRequest(name = name, ids = trackIds, userId = userId())
+        ).id
+
+    suspend fun addToPlaylist(playlistId: String, trackIds: List<String>) {
+        if (trackIds.isEmpty()) return
+        apis.jellyfin().addToPlaylist(playlistId, trackIds.joinToString(","), userId())
+    }
+
+    /** [entryIds] are PlaylistItemIds, which is what the remove endpoint expects. */
+    suspend fun removeFromPlaylist(playlistId: String, entryIds: List<String>) {
+        if (entryIds.isEmpty()) return
+        apis.jellyfin().removeFromPlaylist(playlistId, entryIds.joinToString(","))
+    }
+
+    suspend fun movePlaylistItem(playlistId: String, playlistItemId: String, newIndex: Int) {
+        apis.jellyfin().movePlaylistItem(playlistId, playlistItemId, newIndex)
+    }
+
+    suspend fun deletePlaylist(playlistId: String) = apis.jellyfin().deleteItem(playlistId)
 
     /** Free-text search across artists and albums, used to match Lidarr results. */
     suspend fun search(term: String, types: String, limit: Int = 50): List<BaseItem> =

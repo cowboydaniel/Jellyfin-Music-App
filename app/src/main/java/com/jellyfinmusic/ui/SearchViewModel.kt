@@ -2,6 +2,7 @@ package com.jellyfinmusic.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.jellyfinmusic.data.ActionsController
 import com.jellyfinmusic.data.JellyfinRepository
 import com.jellyfinmusic.data.LidarrRepository
 import com.jellyfinmusic.data.SongMatch
@@ -81,8 +82,15 @@ class SearchViewModel @Inject constructor(
     private val jellyfin: JellyfinRepository,
     private val lidarr: LidarrRepository,
     private val player: PlayerConnection,
-    private val settings: SettingsStore
+    private val settings: SettingsStore,
+    private val actions: ActionsController
 ) : ViewModel() {
+
+    val favoriteIds = jellyfin.favoriteIds
+
+    fun showMenu(item: BaseItem) = actions.showTrackMenu(item)
+
+    fun toggleFavorite(item: BaseItem) = actions.toggleFavorite(item)
 
     private val _state = MutableStateFlow(SearchUiState(lidarrConfigured = settings.current.hasLidarr))
     val state: StateFlow<SearchUiState> = _state

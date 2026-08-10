@@ -1,13 +1,18 @@
 package com.jellyfinmusic.ui
 
 import androidx.lifecycle.ViewModel
+import com.jellyfinmusic.data.ActionsController
 import com.jellyfinmusic.playback.PlayerConnection
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
-    val player: PlayerConnection
+    val player: PlayerConnection,
+    private val actions: ActionsController
 ) : ViewModel() {
     val state = player.state
+    val favoriteIds = actions.favoriteIds
+
+    fun toggleFavorite(itemId: String) = actions.toggleFavoriteById(itemId)
 }

@@ -38,6 +38,7 @@ fun HomeScreen(
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val favorites by viewModel.favoriteIds.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { viewModel.loadOnce() }
 
     LazyColumn(
@@ -75,7 +76,10 @@ fun HomeScreen(
                 QuickPicksPager(
                     tracks = state.quickPicks,
                     artworkFor = viewModel::imageUrl,
-                    onTrackClick = { viewModel.playQuickPicks(it) }
+                    favorites = favorites,
+                    onTrackClick = { viewModel.playQuickPicks(it) },
+                    onMenuClick = viewModel::showMenu,
+                    onFavoriteClick = viewModel::toggleFavorite
                 )
             }
         }
@@ -146,7 +150,10 @@ fun HomeScreen(
 private fun QuickPicksPager(
     tracks: List<BaseItem>,
     artworkFor: (BaseItem) -> String?,
-    onTrackClick: (Int) -> Unit
+    favorites: Set<String>,
+    onTrackClick: (Int) -> Unit,
+    onMenuClick: (BaseItem) -> Unit,
+    onFavoriteClick: (BaseItem) -> Unit
 ) {
     val rowsPerPage = 4
     val pages = tracks.chunked(rowsPerPage)
@@ -168,7 +175,10 @@ private fun QuickPicksPager(
                     subtitle = track.artistName.orEmpty(),
                     artworkUrl = artworkFor(track),
                     onClick = { onTrackClick(globalIndex) },
-                    artSize = 52
+                    artSize = 52,
+                    onMenuClick = { onMenuClick(track) },
+                    isFavorite = track.id in favorites,
+                    onFavoriteClick = { onFavoriteClick(track) }
                 )
             }
         }

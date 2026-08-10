@@ -81,6 +81,13 @@ class PlayerConnection @Inject constructor(
         controller?.addMediaItem(track.toMediaItem())
     }
 
+    /** Inserts directly after the current track rather than at the end. */
+    fun playNext(track: PlayableTrack) {
+        val c = controller ?: return
+        val insertAt = (c.currentMediaItemIndex + 1).coerceIn(0, c.mediaItemCount)
+        c.addMediaItem(insertAt, track.toMediaItem())
+    }
+
     fun playPause() {
         val c = controller ?: return
         if (c.isPlaying) c.pause() else c.play()
@@ -139,6 +146,7 @@ class PlayerConnection @Inject constructor(
         _state.value = PlayerUiState(
             isConnected = true,
             isPlaying = c.isPlaying,
+            currentItemId = c.currentMediaItem?.mediaId,
             currentIndex = c.currentMediaItemIndex.takeIf { c.mediaItemCount > 0 } ?: -1,
             title = c.mediaMetadata.title?.toString().orEmpty(),
             artist = c.mediaMetadata.artist?.toString().orEmpty(),
@@ -156,6 +164,8 @@ class PlayerConnection @Inject constructor(
 data class PlayerUiState(
     val isConnected: Boolean = false,
     val isPlaying: Boolean = false,
+    /** Jellyfin item ID of the current track, used for liking from the player. */
+    val currentItemId: String? = null,
     val currentIndex: Int = -1,
     val title: String = "",
     val artist: String = "",

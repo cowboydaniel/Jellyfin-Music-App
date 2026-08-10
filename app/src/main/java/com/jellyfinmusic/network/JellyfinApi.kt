@@ -1,6 +1,7 @@
 package com.jellyfinmusic.network
 
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Path
@@ -32,15 +33,54 @@ interface JellyfinApi {
         @Query("filters") filters: String? = null,
         @Query("startIndex") startIndex: Int? = null,
         @Query("limit") limit: Int? = null,
-        @Query("fields") fields: String = "PrimaryImageAspectRatio,ChildCount,Genres"
+        @Query("fields") fields: String = "PrimaryImageAspectRatio,ChildCount,Genres,UserData"
     ): ItemsResponse
 
     @GET("Playlists/{playlistId}/Items")
     suspend fun getPlaylistItems(
         @Path("playlistId") playlistId: String,
         @Query("userId") userId: String,
-        @Query("fields") fields: String = "PrimaryImageAspectRatio"
+        @Query("fields") fields: String = "PrimaryImageAspectRatio,UserData"
     ): ItemsResponse
+
+    @POST("Playlists")
+    suspend fun createPlaylist(@Body body: CreatePlaylistRequest): CreatePlaylistResponse
+
+    @POST("Playlists/{playlistId}/Items")
+    suspend fun addToPlaylist(
+        @Path("playlistId") playlistId: String,
+        @Query("ids") ids: String,
+        @Query("userId") userId: String
+    )
+
+    /** Removal is by PlaylistItemId, not track ID, so duplicates stay distinct. */
+    @DELETE("Playlists/{playlistId}/Items")
+    suspend fun removeFromPlaylist(
+        @Path("playlistId") playlistId: String,
+        @Query("entryIds") entryIds: String
+    )
+
+    @POST("Playlists/{playlistId}/Items/{itemId}/Move/{newIndex}")
+    suspend fun movePlaylistItem(
+        @Path("playlistId") playlistId: String,
+        @Path("itemId") playlistItemId: String,
+        @Path("newIndex") newIndex: Int
+    )
+
+    @DELETE("Items/{itemId}")
+    suspend fun deleteItem(@Path("itemId") itemId: String)
+
+    @POST("Users/{userId}/FavoriteItems/{itemId}")
+    suspend fun markFavorite(
+        @Path("userId") userId: String,
+        @Path("itemId") itemId: String
+    )
+
+    @DELETE("Users/{userId}/FavoriteItems/{itemId}")
+    suspend fun unmarkFavorite(
+        @Path("userId") userId: String,
+        @Path("itemId") itemId: String
+    )
 
     /** Music genres present in the library, used for the Explore mood chips. */
     @GET("MusicGenres")

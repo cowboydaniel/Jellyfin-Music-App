@@ -20,6 +20,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Person
@@ -197,7 +199,9 @@ fun TrackRow(
     artSize: Int = 48,
     onMenuClick: (() -> Unit)? = null,
     isArtist: Boolean = false,
-    artShape: Shape = RoundedCornerShape(4.dp)
+    artShape: Shape = RoundedCornerShape(4.dp),
+    isFavorite: Boolean = false,
+    onFavoriteClick: (() -> Unit)? = null
 ) {
     Row(
         modifier = modifier
@@ -228,6 +232,17 @@ fun TrackRow(
                     overflow = TextOverflow.Ellipsis
                 )
             }
+        }
+        if (onFavoriteClick != null) {
+            Icon(
+                if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                contentDescription = if (isFavorite) "Remove from Liked songs" else "Save to Liked songs",
+                tint = if (isFavorite) AppColors.Accent else AppColors.Secondary,
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .clickable(onClick = onFavoriteClick)
+                    .padding(6.dp)
+            )
         }
         if (onMenuClick != null) {
             Icon(

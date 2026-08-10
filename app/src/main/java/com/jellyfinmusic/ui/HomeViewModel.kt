@@ -2,6 +2,7 @@ package com.jellyfinmusic.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.jellyfinmusic.data.ActionsController
 import com.jellyfinmusic.data.JellyfinRepository
 import com.jellyfinmusic.data.SettingsStore
 import com.jellyfinmusic.network.BaseItem
@@ -29,8 +30,15 @@ data class HomeUiState(
 class HomeViewModel @Inject constructor(
     private val repo: JellyfinRepository,
     private val player: PlayerConnection,
-    private val settings: SettingsStore
+    private val settings: SettingsStore,
+    private val actions: ActionsController
 ) : ViewModel() {
+
+    val favoriteIds = repo.favoriteIds
+
+    fun showMenu(item: BaseItem) = actions.showTrackMenu(item)
+
+    fun toggleFavorite(item: BaseItem) = actions.toggleFavorite(item)
 
     private val _state = MutableStateFlow(HomeUiState())
     val state: StateFlow<HomeUiState> = _state

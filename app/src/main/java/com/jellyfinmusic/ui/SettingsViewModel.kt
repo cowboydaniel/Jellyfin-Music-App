@@ -2,6 +2,8 @@ package com.jellyfinmusic.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.jellyfinmusic.data.ActionsController
+import com.jellyfinmusic.data.JellyfinRepository
 import com.jellyfinmusic.data.LidarrRepository
 import com.jellyfinmusic.data.SettingsStore
 import com.jellyfinmusic.network.LidarrProfile
@@ -31,7 +33,9 @@ data class SettingsUiState(
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val settings: SettingsStore,
-    private val lidarr: LidarrRepository
+    private val lidarr: LidarrRepository,
+    private val jellyfin: JellyfinRepository,
+    private val actions: ActionsController
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(
@@ -106,5 +110,11 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun logout() = settings.logout()
+    fun logout() {
+        // Clear per-user caches before the session goes, so signing in as
+        // someone else starts from a clean slate.
+        jellyfin.clearUserState()
+        actions.clearUserState()
+        settings.logout()
+    }
 }

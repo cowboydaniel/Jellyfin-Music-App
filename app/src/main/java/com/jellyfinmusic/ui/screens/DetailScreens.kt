@@ -1,6 +1,8 @@
 package com.jellyfinmusic.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +20,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Shuffle
@@ -25,13 +30,19 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
@@ -54,10 +65,31 @@ fun AlbumDetailScreen(
     isPlaylist: Boolean,
     fallbackTitle: String,
     contentPadding: PaddingValues,
+    onDeleted: () -> Unit = {},
     viewModel: DetailViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val favorites by viewModel.favoriteIds.collectAsStateWithLifecycle()
+    var confirmDelete by remember { mutableStateOf(false) }
     LaunchedEffect(albumId, isPlaylist) { viewModel.loadAlbum(albumId, isPlaylist) }
+
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            containerColor = AppColors.Surface,
+            title = { Text("Delete playlist?") },
+            text = { Text("\"${'$'}{state.header?.name ?: fallbackTitle}\" will be removed from your server.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDelete = false
+                    viewModel.deleteCurrentPlaylist(onDeleted)
+                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = false }) { Text("Cancel") }
+            }
+        )
+    }
 
     StateBox(state.isLoading, state.error, false, "") {
         LazyColumn(
@@ -80,7 +112,8 @@ fun AlbumDetailScreen(
                     artworkUrl = header?.let { viewModel.imageUrl(it) },
                     onPlay = { viewModel.playAll(shuffle = false) },
                     onShuffle = { viewModel.playAll(shuffle = true) },
-                    onRadio = viewModel::startRadio
+                    onRadio = viewModel::startRadio,
+                    onDelete = if (isPlaylist) ({ confirmDelete = true }) else null
                 )
             }
 
@@ -93,7 +126,9 @@ fun AlbumDetailScreen(
                     ).joinToString(" · "),
                     artworkUrl = viewModel.imageUrl(track),
                     onClick = { viewModel.play(index) },
-                    onMenuClick = { viewModel.addToQueue(track) }
+                    onMenuClick = { viewModel.showMenu(track) },
+                    isFavorite = track.id in favorites,
+                    onFavoriteClick = { viewModel.toggleFavorite(track) }
                 )
             }
 
@@ -120,6 +155,7 @@ fun ArtistDetailScreen(
     viewModel: DetailViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val favorites by viewModel.favoriteIds.collectAsStateWithLifecycle()
     LaunchedEffect(artistId) { viewModel.loadArtist(artistId) }
 
     StateBox(state.isLoading, state.error, false, "") {
@@ -170,7 +206,9 @@ fun ArtistDetailScreen(
                         ).joinToString(" · "),
                         artworkUrl = viewModel.imageUrl(track),
                         onClick = { viewModel.play(index) },
-                        onMenuClick = { viewModel.addToQueue(track) }
+                        onMenuClick = { viewModel.showMenu(track) },
+                        isFavorite = track.id in favorites,
+                        onFavoriteClick = { viewModel.toggleFavorite(track) }
                     )
                 }
             }
@@ -189,7 +227,8 @@ private fun DetailHeader(
     artworkUrl: String?,
     onPlay: () -> Unit,
     onShuffle: () -> Unit,
-    onRadio: () -> Unit
+    onRadio: () -> Unit,
+    onDelete: (() -> Unit)? = null
 ) {
     Column(
         Modifier
@@ -244,6 +283,11 @@ private fun DetailHeader(
             OutlinedButton(onClick = onRadio) {
                 Icon(Icons.Filled.Radio, contentDescription = null, Modifier.size(18.dp))
                 Text("Radio", Modifier.padding(start = 6.dp))
+            }
+            onDelete?.let {
+                OutlinedButton(onClick = it) {
+                    Icon(Icons.Filled.Delete, contentDescription = "Delete playlist", Modifier.size(18.dp))
+                }
             }
         }
     }

@@ -43,14 +43,48 @@ data class BaseItem(
     @SerialName("RunTimeTicks") val runTimeTicks: Long? = null,
     @SerialName("ChildCount") val childCount: Int? = null,
     @SerialName("ImageTags") val imageTags: Map<String, String> = emptyMap(),
-    @SerialName("AlbumPrimaryImageTag") val albumPrimaryImageTag: String? = null
+    @SerialName("AlbumPrimaryImageTag") val albumPrimaryImageTag: String? = null,
+    @SerialName("UserData") val userData: UserItemData? = null,
+    /**
+     * The user a playlist belongs to. Jellyfin 10.9+ reports this; older
+     * servers omit it, in which case ownership cannot be determined.
+     */
+    @SerialName("OwnerUserId") val ownerUserId: String? = null,
+    /**
+     * Identifies this row *within a playlist* rather than the underlying track,
+     * and is the handle required to remove it. Only present when the item came
+     * from a playlist query.
+     */
+    @SerialName("PlaylistItemId") val playlistItemId: String? = null
 ) {
     /** Duration in milliseconds; Jellyfin reports 100-nanosecond ticks. */
     val durationMs: Long get() = (runTimeTicks ?: 0L) / 10_000L
 
     val artistName: String?
         get() = albumArtist ?: artistItems.firstOrNull()?.name
+
+    val isFavorite: Boolean get() = userData?.isFavorite == true
 }
+
+@Serializable
+data class UserItemData(
+    @SerialName("IsFavorite") val isFavorite: Boolean = false,
+    @SerialName("Played") val played: Boolean = false,
+    @SerialName("PlayCount") val playCount: Int = 0
+)
+
+@Serializable
+data class CreatePlaylistRequest(
+    @SerialName("Name") val name: String,
+    @SerialName("Ids") val ids: List<String> = emptyList(),
+    @SerialName("UserId") val userId: String,
+    @SerialName("MediaType") val mediaType: String = "Audio"
+)
+
+@Serializable
+data class CreatePlaylistResponse(
+    @SerialName("Id") val id: String = ""
+)
 
 @Serializable
 data class NameIdPair(

@@ -20,7 +20,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Repeat
@@ -61,7 +62,9 @@ private enum class PlayerTab(val label: String) { UP_NEXT("UP NEXT"), RELATED("R
 fun NowPlayingScreen(
     state: PlayerUiState,
     player: PlayerConnection,
-    onCollapse: () -> Unit
+    onCollapse: () -> Unit,
+    isFavorite: Boolean = false,
+    onToggleFavorite: () -> Unit = {}
 ) {
     var tab by remember { mutableStateOf(PlayerTab.UP_NEXT) }
     var showQueue by remember { mutableStateOf(false) }
@@ -119,9 +122,18 @@ fun NowPlayingScreen(
                     )
                 }
                 Icon(
-                    Icons.Filled.MoreVert,
-                    contentDescription = "More",
-                    modifier = Modifier.size(40.dp).padding(8.dp)
+                    if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                    contentDescription = if (isFavorite) {
+                        "Remove from Liked songs"
+                    } else {
+                        "Save to Liked songs"
+                    },
+                    tint = if (isFavorite) AppColors.Accent else AppColors.OnBackground,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onToggleFavorite)
+                        .padding(8.dp)
                 )
             }
 

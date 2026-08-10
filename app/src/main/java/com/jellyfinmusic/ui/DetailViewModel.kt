@@ -2,12 +2,15 @@ package com.jellyfinmusic.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.jellyfinmusic.data.ActionsController
 import com.jellyfinmusic.data.JellyfinRepository
+import com.jellyfinmusic.data.PlaylistContext
 import com.jellyfinmusic.network.BaseItem
 import com.jellyfinmusic.playback.PlayerConnection
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -20,20 +23,37 @@ data class DetailUiState(
 )
 
 /**
- * Backs both the album/playlist screen (header + track list) and the artist
- * screen (header + top tracks + albums); which lists are filled depends on
- * which loader the screen calls.
+ * Backs the album, playlist, artist and Liked songs screens: a header plus one
+ * or two lists. Which loader the screen calls decides what gets filled in.
  */
 @HiltViewModel
 class DetailViewModel @Inject constructor(
     private val repo: JellyfinRepository,
-    private val player: PlayerConnection
+    private val player: PlayerConnection,
+    val actions: ActionsController
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(DetailUiState())
     val state: StateFlow<DetailUiState> = _state
 
+    val favoriteIds = repo.favoriteIds
+
+    /** Set while showing a playlist, so tracks can be removed from it. */
+    private var currentPlaylistId: String? = null
+
+    private var reloadCurrent: (() -> Unit)? = null
+
+    init {
+        // Adding or removing a track elsewhere should be reflected here without
+        // the user having to back out and return.
+        viewModelScope.launch {
+            actions.playlistRevision.drop(1).collect { reloadCurrent?.invoke() }
+        }
+    }
+
     fun loadAlbum(albumId: String, isPlaylist: Boolean) {
+        currentPlaylistId = albumId.takeIf { isPlaylist }
+        reloadCurrent = { loadAlbum(albumId, isPlaylist) }
         load {
             val header = repo.itemById(albumId)
             val tracks = if (isPlaylist) repo.playlistTracks(albumId) else repo.tracksOfAlbum(albumId)
@@ -42,6 +62,8 @@ class DetailViewModel @Inject constructor(
     }
 
     fun loadArtist(artistId: String) {
+        currentPlaylistId = null
+        reloadCurrent = { loadArtist(artistId) }
         load {
             val header = repo.itemById(artistId)
             val albums = repo.albumsOfArtist(artistId)
@@ -50,6 +72,13 @@ class DetailViewModel @Inject constructor(
             val tracks = albums.firstOrNull()?.let { repo.tracksOfAlbum(it.id) }.orEmpty()
             DetailUiState(header = header, albums = albums, tracks = tracks, isLoading = false)
         }
+    }
+
+    /** The Liked songs view: every track the user has favourited. */
+    fun loadLikedSongs() {
+        currentPlaylistId = null
+        reloadCurrent = { loadLikedSongs() }
+        load { DetailUiState(tracks = repo.favoriteSongs(), isLoading = false) }
     }
 
     fun play(index: Int) {
@@ -74,12 +103,24 @@ class DetailViewModel @Inject constructor(
         }
     }
 
-    fun addToQueue(item: BaseItem) = player.addToQueue(item.toPlayable(repo))
+    fun showMenu(item: BaseItem) {
+        val context = currentPlaylistId?.let { PlaylistContext(it, item.playlistItemId) }
+        actions.showTrackMenu(item, context)
+    }
+
+    fun toggleFavorite(item: BaseItem) = actions.toggleFavorite(item)
+
+    fun deleteCurrentPlaylist(onDeleted: () -> Unit) {
+        val id = currentPlaylistId ?: return
+        actions.deletePlaylist(id, onDeleted)
+    }
+
+    val isPlaylist: Boolean get() = currentPlaylistId != null
 
     fun imageUrl(item: BaseItem): String? = repo.artworkFor(item)
 
     private fun load(block: suspend () -> DetailUiState) {
-        _state.value = DetailUiState(isLoading = true)
+        _state.value = _state.value.copy(isLoading = true, error = null)
         viewModelScope.launch {
             runCatching { block() }
                 .onSuccess { _state.value = it }

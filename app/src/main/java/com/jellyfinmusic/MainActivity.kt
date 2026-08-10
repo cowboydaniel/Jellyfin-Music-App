@@ -37,6 +37,8 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -44,6 +46,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,12 +66,15 @@ import com.jellyfinmusic.data.SettingsStore
 import com.jellyfinmusic.network.BaseItem
 import com.jellyfinmusic.playback.PlayerConnection
 import com.jellyfinmusic.ui.LibraryViewModel
+import com.jellyfinmusic.ui.PlayerViewModel
+import com.jellyfinmusic.ui.components.ActionSheetHost
 import com.jellyfinmusic.ui.components.MiniPlayer
 import com.jellyfinmusic.ui.screens.AlbumDetailScreen
 import com.jellyfinmusic.ui.screens.ArtistDetailScreen
 import com.jellyfinmusic.ui.screens.ExploreScreen
 import com.jellyfinmusic.ui.screens.HomeScreen
 import com.jellyfinmusic.ui.screens.LibraryScreen
+import com.jellyfinmusic.ui.screens.LikedSongsScreen
 import com.jellyfinmusic.ui.screens.LoginScreen
 import com.jellyfinmusic.ui.screens.NowPlayingScreen
 import com.jellyfinmusic.ui.screens.SearchScreen
@@ -79,6 +85,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import java.net.URLDecoder
 import java.net.URLEncoder
 import javax.inject.Inject
+import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -130,6 +137,7 @@ private object Routes {
     const val SETTINGS = "settings"
     const val ALBUM = "album/{id}/{title}/{isPlaylist}"
     const val ARTIST = "artist/{id}/{name}"
+    const val LIKED = "liked"
 
     fun album(id: String, title: String, isPlaylist: Boolean) =
         "album/$id/${title.encode()}/$isPlaylist"
@@ -151,14 +159,21 @@ private fun AppRoot(startLoggedIn: Boolean, player: PlayerConnection) {
     val playerState by player.state.collectAsStateWithLifecycle()
     var showNowPlaying by remember { mutableStateOf(false) }
 
+    val playerViewModel: PlayerViewModel = hiltViewModel()
+    val favoriteIds by playerViewModel.favoriteIds.collectAsStateWithLifecycle()
+
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val isLoginRoute = currentRoute == Routes.LOGIN
     val isTabRoute = currentRoute in TAB_ROUTES
 
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
     Box(Modifier.fillMaxSize().background(AppColors.Background)) {
         Scaffold(
             containerColor = AppColors.Background,
+            snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
                 if (!isLoginRoute) {
                     TopAppBar(
@@ -232,6 +247,14 @@ private fun AppRoot(startLoggedIn: Boolean, player: PlayerConnection) {
             }
         }
 
+        // One host for every context sheet, mounted above the nav graph so it
+        // survives navigation and can be opened from any screen.
+        if (!isLoginRoute) {
+            ActionSheetHost(onShowMessage = { message ->
+                scope.launch { snackbarHostState.showSnackbar(message) }
+            })
+        }
+
         // The full player slides up over everything, including the nav bar.
         AnimatedVisibility(
             visible = showNowPlaying && playerState.hasTrack,
@@ -241,7 +264,11 @@ private fun AppRoot(startLoggedIn: Boolean, player: PlayerConnection) {
             NowPlayingScreen(
                 state = playerState,
                 player = player,
-                onCollapse = { showNowPlaying = false }
+                onCollapse = { showNowPlaying = false },
+                isFavorite = playerState.currentItemId in favoriteIds,
+                onToggleFavorite = {
+                    playerState.currentItemId?.let(playerViewModel::toggleFavorite)
+                }
             )
         }
     }
@@ -316,7 +343,8 @@ private fun NavGraph(
                 contentPadding = contentPadding,
                 onAlbumClick = openAlbum,
                 onArtistClick = openArtist,
-                onPlaylistClick = openAlbum
+                onPlaylistClick = openAlbum,
+                onLikedSongsClick = { navController.navigate(Routes.LIKED) }
             )
         }
 
@@ -333,8 +361,13 @@ private fun NavGraph(
                 albumId = entry.arguments?.getString("id").orEmpty(),
                 isPlaylist = entry.arguments?.getString("isPlaylist").toBoolean(),
                 fallbackTitle = entry.arguments?.getString("title").decode(),
-                contentPadding = contentPadding
+                contentPadding = contentPadding,
+                onDeleted = { navController.popBackStack() }
             )
+        }
+
+        composable(Routes.LIKED) {
+            LikedSongsScreen(contentPadding = contentPadding)
         }
 
         composable(Routes.ARTIST) { entry ->
@@ -407,5 +440,6 @@ private fun titleFor(route: String?, args: android.os.Bundle?): String = when (r
     Routes.SETTINGS -> "Settings"
     Routes.ALBUM -> args?.getString("title").decode().ifBlank { "Album" }
     Routes.ARTIST -> args?.getString("name").decode().ifBlank { "Artist" }
+    Routes.LIKED -> "Liked songs"
     else -> "Jellyfin Music"
 }
