@@ -146,6 +146,10 @@ class JellyfinRepository @Inject constructor(
         recursive = false
     ).items.firstOrNull()
 
+    /** Lyrics for a track, empty when the server has none or is pre-10.9. */
+    suspend fun lyrics(itemId: String): List<com.jellyfinmusic.network.LyricLine> =
+        runCatching { apis.jellyfin().getLyrics(itemId).lyrics }.getOrDefault(emptyList())
+
     /** Server-generated radio seeded from a track, album or artist. */
     suspend fun instantMix(itemId: String): List<BaseItem> =
         apis.jellyfin().getInstantMix(itemId, userId()).items
@@ -272,7 +276,11 @@ class JellyfinRepository @Inject constructor(
         val s = settings.current
         if (s.jellyfinUrl.isBlank()) return null
         val tagPart = if (tag.isNullOrBlank()) "" else "&tag=$tag"
-        return "${s.jellyfinUrl}Items/$itemId/Images/Primary?fillHeight=$maxSize&fillWidth=$maxSize$tagPart"
+        // maxHeight/maxWidth bound the image without changing its shape.
+        // fillHeight/fillWidth would pad non-square art (video thumbnails, wide
+        // covers) into a square with black bars baked in; cropping to a square
+        // is the UI's job, via ContentScale.Crop.
+        return "${s.jellyfinUrl}Items/$itemId/Images/Primary?maxHeight=$maxSize&maxWidth=$maxSize$tagPart"
     }
 
     /** Best available artwork for a track: its own image, else the album's. */

@@ -43,15 +43,41 @@ fun rememberDominantColor(artworkUrl: String?): State<Color> {
                 val result = context.imageLoader.execute(request) as? SuccessResult
                 val bitmap = (result?.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap
                 bitmap?.let { bmp ->
-                    val palette = Palette.from(bmp).clearFilters().generate()
-                    palette.darkMutedSwatch?.rgb
+                    val palette = Palette.from(bmp).generate()
+                    // Vibrant first: dark artwork (a video still, a black cover)
+                    // yields a near-black muted swatch, which washes the whole
+                    // screen out to the same flat background it sits on.
+                    palette.vibrantSwatch?.rgb
+                        ?: palette.lightVibrantSwatch?.rgb
+                        ?: palette.darkVibrantSwatch?.rgb
                         ?: palette.mutedSwatch?.rgb
                         ?: palette.dominantSwatch?.rgb
                 }
             }.getOrNull()
         }
-        color.value = extracted?.let { Color(it) } ?: AppColors.SurfaceVariant
+        color.value = extracted?.let { Color(it).forBackdrop() } ?: AppColors.SurfaceVariant
     }
 
     return color
 }
+
+/**
+ * Keeps an extracted colour usable as a backdrop: dark ones are lifted so the
+ * gradient reads as colour rather than black, bright ones are pulled down so
+ * white text stays legible over them.
+ */
+private fun Color.forBackdrop(): Color {
+    val luminance = 0.299f * red + 0.587f * green + 0.114f * blue
+    return when {
+        luminance < 0.18f -> lerpTo(Color.White, 0.28f)
+        luminance > 0.65f -> lerpTo(Color.Black, 0.35f)
+        else -> this
+    }
+}
+
+private fun Color.lerpTo(other: Color, amount: Float) = Color(
+    red = red + (other.red - red) * amount,
+    green = green + (other.green - green) * amount,
+    blue = blue + (other.blue - blue) * amount,
+    alpha = 1f
+)

@@ -161,6 +161,7 @@ private fun AppRoot(startLoggedIn: Boolean, player: PlayerConnection) {
 
     val playerViewModel: PlayerViewModel = hiltViewModel()
     val favoriteIds by playerViewModel.favoriteIds.collectAsStateWithLifecycle()
+    val lyricsState by playerViewModel.lyrics.collectAsStateWithLifecycle()
 
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
@@ -264,11 +265,16 @@ private fun AppRoot(startLoggedIn: Boolean, player: PlayerConnection) {
             NowPlayingScreen(
                 state = playerState,
                 player = player,
+                lyrics = lyricsState,
                 onCollapse = { showNowPlaying = false },
                 isFavorite = playerState.currentItemId in favoriteIds,
                 onToggleFavorite = {
                     playerState.currentItemId?.let(playerViewModel::toggleFavorite)
-                }
+                },
+                onShowMenu = playerViewModel::showMenuForCurrent,
+                onAddToPlaylist = playerViewModel::addCurrentToPlaylist,
+                onStartRadio = playerViewModel::startRadioFromCurrent,
+                onLyricsRequested = { playerViewModel.loadLyrics(playerState.currentItemId) }
             )
         }
     }

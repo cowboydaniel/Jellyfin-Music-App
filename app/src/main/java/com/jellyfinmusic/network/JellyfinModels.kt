@@ -91,3 +91,17 @@ data class NameIdPair(
     @SerialName("Id") val id: String? = null,
     @SerialName("Name") val name: String? = null
 )
+
+@Serializable
+data class LyricsResponse(
+    @SerialName("Lyrics") val lyrics: List<LyricLine> = emptyList()
+)
+
+@Serializable
+data class LyricLine(
+    @SerialName("Text") val text: String = "",
+    /** Start offset in 100-nanosecond ticks; absent for unsynced lyrics. */
+    @SerialName("Start") val start: Long? = null
+) {
+    val startMs: Long? get() = start?.let { it / 10_000L }
+}

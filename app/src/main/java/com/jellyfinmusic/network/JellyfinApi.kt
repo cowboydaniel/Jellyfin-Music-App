@@ -82,6 +82,13 @@ interface JellyfinApi {
         @Path("itemId") itemId: String
     )
 
+    /**
+     * Track lyrics, plain or timestamped. Added in Jellyfin 10.9; older servers
+     * return 404, which the UI treats as "no lyrics".
+     */
+    @GET("Audio/{itemId}/Lyrics")
+    suspend fun getLyrics(@Path("itemId") itemId: String): LyricsResponse
+
     /** Music genres present in the library, used for the Explore mood chips. */
     @GET("MusicGenres")
     suspend fun getMusicGenres(
