@@ -1,9 +1,11 @@
 package com.jellyfinmusic.ui.theme
 
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -59,7 +61,14 @@ private val AppTypography = Typography(
 fun JellyfinMusicTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = Scheme,
-        typography = AppTypography,
-        content = content
-    )
+        typography = AppTypography
+    ) {
+        // Text and Icon fall back to LocalContentColor, which defaults to black
+        // outside a Surface. Screens drawn over the Scaffold — the full player —
+        // would otherwise render every uncoloured label in black on black.
+        CompositionLocalProvider(
+            LocalContentColor provides AppColors.OnBackground,
+            content = content
+        )
+    }
 }

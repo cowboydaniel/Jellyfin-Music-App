@@ -38,7 +38,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import coil.compose.SubcomposeAsyncImage
+import coil.request.ImageRequest
 import com.jellyfinmusic.ui.theme.AppColors
 
 /** Artwork with a placeholder that keeps the layout stable while loading or on failure. */
@@ -69,7 +71,13 @@ fun Artwork(
             placeholder()
         } else {
             SubcomposeAsyncImage(
-                model = url,
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(url)
+                    // Bars baked into the source file are cut here; the server
+                    // has no way to strip them.
+                    .transformations(TrimLetterboxTransformation())
+                    .crossfade(true)
+                    .build(),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),

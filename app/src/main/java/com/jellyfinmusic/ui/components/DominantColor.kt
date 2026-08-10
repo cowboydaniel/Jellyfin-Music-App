@@ -38,6 +38,9 @@ fun rememberDominantColor(artworkUrl: String?): State<Color> {
                     .data(artworkUrl)
                     // Palette needs to read pixels back, which a hardware bitmap forbids.
                     .allowHardware(false)
+                    // Match what the UI actually shows, so black bars do not
+                    // drag the extracted colour toward black.
+                    .transformations(TrimLetterboxTransformation())
                     .size(200)
                     .build()
                 val result = context.imageLoader.execute(request) as? SuccessResult

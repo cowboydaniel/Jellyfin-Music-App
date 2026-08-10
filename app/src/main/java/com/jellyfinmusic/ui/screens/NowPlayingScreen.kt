@@ -8,6 +8,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -119,7 +122,14 @@ fun NowPlayingScreen(
                 }
             }
     ) {
-        Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                // The gradient runs edge to edge behind the system bars, but the
+                // controls must not sit under the clock or the nav buttons.
+                .windowInsetsPadding(WindowInsets.systemBars)
+                .padding(horizontal = 20.dp)
+        ) {
             Row(
                 Modifier.fillMaxWidth().padding(top = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -145,7 +155,7 @@ fun NowPlayingScreen(
             }
 
             Box(
-                Modifier.weight(1f).fillMaxWidth().padding(vertical = 8.dp),
+                Modifier.weight(1f).fillMaxWidth().padding(vertical = 4.dp),
                 contentAlignment = Alignment.Center
             ) {
                 when {
@@ -271,7 +281,7 @@ fun NowPlayingScreen(
             // Tab strip doubles as the panel toggle: tapping the open tab
             // returns to the artwork.
             Row(
-                Modifier.fillMaxWidth().padding(bottom = 20.dp),
+                Modifier.fillMaxWidth().padding(bottom = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(28.dp)
             ) {
                 PlayerTab.entries.forEach { entry ->

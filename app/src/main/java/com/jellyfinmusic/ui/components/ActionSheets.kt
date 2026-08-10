@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -81,7 +82,9 @@ fun ActionSheetHost(
         onDismissRequest = viewModel.actions::dismissSheet,
         sheetState = sheetState,
         containerColor = AppColors.Surface,
-        dragHandle = null
+        dragHandle = null,
+        // Keeps the last action clear of the gesture bar / nav buttons.
+        modifier = Modifier.navigationBarsPadding()
     ) {
         when (val current = sheet) {
             is ActionSheet.TrackMenu -> TrackMenuSheet(
