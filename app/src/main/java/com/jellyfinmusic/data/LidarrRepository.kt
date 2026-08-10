@@ -10,6 +10,16 @@ import com.jellyfinmusic.network.LidarrRootFolder
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** A song found on MusicBrainz, carrying the album Lidarr would have to fetch. */
+data class SongMatch(
+    val recordingId: String,
+    val title: String,
+    val artistName: String,
+    val albumTitle: String,
+    val releaseGroupId: String,
+    val artworkUrl: String?
+)
+
 @Singleton
 class LidarrRepository @Inject constructor(
     private val apis: ApiProvider,
@@ -17,6 +27,56 @@ class LidarrRepository @Inject constructor(
 ) {
 
     suspend fun lookupArtists(term: String): List<LidarrArtist> = apis.lidarr().lookupArtist(term)
+
+    /**
+     * Song-level search, which Lidarr itself does not offer.
+     *
+     * Lidarr can only monitor and grab whole albums, so a song is looked up on
+     * MusicBrainz and reported together with the release it belongs to. The
+     * request that follows is for that album — see [resolveAlbumForSong].
+     */
+    suspend fun lookupSongs(term: String): List<SongMatch> {
+        val recordings = apis.musicBrainz().searchRecordings(term).recordings
+        return recordings.mapNotNull { recording ->
+            // Prefer a release that belongs to a proper album release-group;
+            // singles and compilations are a poor thing to request on your behalf.
+            val release = recording.releases.firstOrNull {
+                it.releaseGroup?.primaryType.equals("Album", ignoreCase = true)
+            } ?: recording.releases.firstOrNull() ?: return@mapNotNull null
+
+            val releaseGroupId = release.releaseGroup?.id ?: return@mapNotNull null
+            SongMatch(
+                recordingId = recording.id,
+                title = recording.title,
+                artistName = recording.artistName,
+                albumTitle = release.releaseGroup.title ?: release.title,
+                releaseGroupId = releaseGroupId,
+                // Cover Art Archive serves art keyed by release-group; a miss
+                // just 404s and the UI falls back to its placeholder.
+                artworkUrl = "https://coverartarchive.org/release-group/$releaseGroupId/front-250"
+            )
+        }.distinctBy { it.releaseGroupId to it.title.lowercase() }
+    }
+
+    /**
+     * Finds the Lidarr album record behind a [SongMatch] so it can be added.
+     * Matching on the MusicBrainz release-group ID is exact; the text search is
+     * only there to give Lidarr something to resolve.
+     */
+    suspend fun resolveAlbumForSong(song: SongMatch): LidarrAlbum? {
+        val candidates = runCatching {
+            apis.lidarr().lookupAlbum("lidarr:${song.releaseGroupId}")
+        }.getOrNull()?.takeIf { it.isNotEmpty() }
+            ?: runCatching {
+                apis.lidarr().lookupAlbum("${song.artistName} ${song.albumTitle}")
+            }.getOrDefault(emptyList())
+
+        return candidates.firstOrNull { it.foreignAlbumId == song.releaseGroupId }
+            ?: candidates.firstOrNull {
+                it.title.equals(song.albumTitle, ignoreCase = true)
+            }
+            ?: candidates.firstOrNull()
+    }
 
     suspend fun lookupAlbums(term: String): List<LidarrAlbum> = apis.lidarr().lookupAlbum(term)
 

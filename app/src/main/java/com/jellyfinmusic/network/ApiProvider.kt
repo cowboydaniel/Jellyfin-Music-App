@@ -102,6 +102,37 @@ class ApiProvider @Inject constructor(
         return api
     }
 
+    private var musicBrainzApi: MusicBrainzApi? = null
+
+    /**
+     * MusicBrainz is a fixed public endpoint, so this client never needs
+     * rebuilding. Their terms require an application-identifying User-Agent.
+     */
+    @Synchronized
+    fun musicBrainz(): MusicBrainzApi {
+        musicBrainzApi?.let { return it }
+        val client = baseClient()
+            .addInterceptor { chain ->
+                chain.proceed(
+                    chain.request().newBuilder()
+                        .header(
+                            "User-Agent",
+                            "JellyfinMusic/1.0 (https://github.com/cowboydaniel/Jellyfin-Music-App)"
+                        )
+                        .header("Accept", "application/json")
+                        .build()
+                )
+            }
+            .build()
+        return Retrofit.Builder()
+            .baseUrl("https://musicbrainz.org/")
+            .client(client)
+            .addConverterFactory(converter)
+            .build()
+            .create(MusicBrainzApi::class.java)
+            .also { musicBrainzApi = it }
+    }
+
     /**
      * Authenticating happens before a token exists, and possibly against a URL
      * that has not been saved yet, so it needs a one-off client.

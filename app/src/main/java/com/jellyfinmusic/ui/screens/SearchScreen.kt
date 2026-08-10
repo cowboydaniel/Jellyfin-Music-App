@@ -257,6 +257,15 @@ fun SearchScreen(
                         )
                     }
                 } else {
+                    item {
+                        Text(
+                            "Lidarr grabs whole albums, so requesting a song adds " +
+                                "the album it appears on.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = AppColors.Secondary,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
                     if (state.isRequestLoading) {
                         item {
                             Box(Modifier.fillMaxWidth().padding(24.dp), Alignment.Center) {

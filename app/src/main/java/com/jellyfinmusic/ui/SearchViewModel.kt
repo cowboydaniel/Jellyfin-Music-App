@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.jellyfinmusic.data.JellyfinRepository
 import com.jellyfinmusic.data.LidarrRepository
+import com.jellyfinmusic.data.SongMatch
 import com.jellyfinmusic.data.SettingsStore
 import com.jellyfinmusic.network.BaseItem
 import com.jellyfinmusic.network.LidarrAlbum
@@ -40,7 +41,12 @@ data class RequestResult(
     val imageUrl: String?,
     val status: LibraryStatus,
     val artist: LidarrArtist? = null,
-    val album: LidarrAlbum? = null
+    val album: LidarrAlbum? = null,
+    /**
+     * Set for song results. Lidarr cannot grab a single track, so requesting
+     * one adds the album it appears on; the UI says so on the row.
+     */
+    val song: SongMatch? = null
 )
 
 data class SearchUiState(
@@ -159,18 +165,42 @@ class SearchViewModel @Inject constructor(
                             .mapNotNull { it.name?.normalizeForMatch() }
                             .toSet()
                     }
+                    val songsD = async {
+                        runCatching { lidarr.lookupSongs(term) }.getOrDefault(emptyList())
+                    }
+                    // Songs are matched against the library by title, so a track
+                    // you already have is not offered as a request.
+                    val ownedSongsD = async {
+                        safe { jellyfin.search(term, "Audio", 50) }
+                            .mapNotNull { it.name?.normalizeForMatch() }
+                            .toSet()
+                    }
+
                     val owned = ownedD.await()
+                    val ownedSongs = ownedSongsD.await()
+
+                    val songResults = songsD.await().map { song ->
+                        val status = when {
+                            requested.contains(song.key()) -> LibraryStatus.REQUESTED
+                            ownedSongs.contains(song.title.normalizeForMatch()) -> LibraryStatus.IN_LIBRARY
+                            else -> LibraryStatus.NOT_IN_LIBRARY
+                        }
+                        song.toResult(status)
+                    }
+
                     val results = artistsD.await().map { it.toResult() } +
                         albumsD.await().map { it.toResult() }
 
-                    results.map { result ->
+                    val flagged = results.map { result ->
                         val status = when {
                             requested.contains(result.key) -> LibraryStatus.REQUESTED
                             owned.contains(result.title.normalizeForMatch()) -> LibraryStatus.IN_LIBRARY
                             else -> LibraryStatus.NOT_IN_LIBRARY
                         }
                         result.copy(status = status)
-                    }.sortedBy { it.status.ordinal }
+                    }
+
+                    (flagged + songResults).sortedBy { it.status.ordinal }
                 }
             }
                 .onSuccess {
@@ -200,14 +230,21 @@ class SearchViewModel @Inject constructor(
             val outcome = when {
                 result.artist != null -> lidarr.addArtist(result.artist).map { }
                 result.album != null -> lidarr.addAlbum(result.album).map { }
+                result.song != null -> requestSong(result.song)
                 else -> Result.failure(IllegalStateException("Nothing to request"))
+            }
+            val confirmation = if (result.song != null) {
+                "Requested \"${result.song.albumTitle}\" for \"${result.title}\" — " +
+                    "Lidarr grabs whole albums"
+            } else {
+                "Requested \"${result.title}\" — Lidarr is searching for it"
             }
             outcome
                 .onSuccess {
                     requested.add(result.key)
                     _state.value = _state.value.copy(
                         isRequestLoading = false,
-                        message = "Requested \"${result.title}\" — Lidarr is searching for it",
+                        message = confirmation,
                         requestResults = _state.value.requestResults.map {
                             if (it.key == result.key) it.copy(status = LibraryStatus.REQUESTED) else it
                         }
@@ -220,6 +257,18 @@ class SearchViewModel @Inject constructor(
                     )
                 }
         }
+    }
+
+    /**
+     * Turns a song into a request by resolving the album that carries it and
+     * adding that, since Lidarr has no smaller unit to grab.
+     */
+    private suspend fun requestSong(song: SongMatch): Result<Unit> {
+        val album = runCatching { lidarr.resolveAlbumForSong(song) }.getOrNull()
+            ?: return Result.failure(
+                IllegalStateException("Lidarr could not find the album \"${song.albumTitle}\"")
+            )
+        return lidarr.addAlbum(album).map { }
     }
 
     fun imageUrl(item: BaseItem): String? = jellyfin.artworkFor(item)
@@ -249,6 +298,17 @@ class SearchViewModel @Inject constructor(
     )
 
     private fun LidarrImage.best(): String? = remoteUrl ?: url
+
+    private fun SongMatch.key() = "song:$recordingId"
+
+    private fun SongMatch.toResult(status: LibraryStatus) = RequestResult(
+        key = key(),
+        title = title,
+        subtitle = listOfNotNull("Song", artistName, "from $albumTitle").joinToString(" · "),
+        imageUrl = artworkUrl,
+        status = status,
+        song = this
+    )
 }
 
 /**
