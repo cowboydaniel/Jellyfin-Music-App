@@ -55,6 +55,84 @@ class JellyfinRepository @Inject constructor(
     suspend fun playlistTracks(playlistId: String): List<BaseItem> =
         apis.jellyfin().getPlaylistItems(playlistId, userId()).items
 
+    suspend fun allAlbums(limit: Int? = null): List<BaseItem> = apis.jellyfin().getItems(
+        userId = userId(),
+        includeItemTypes = "MusicAlbum",
+        sortBy = "SortName",
+        limit = limit
+    ).items
+
+    suspend fun allSongs(limit: Int = 500): List<BaseItem> = apis.jellyfin().getItems(
+        userId = userId(),
+        includeItemTypes = "Audio",
+        sortBy = "SortName",
+        limit = limit
+    ).items
+
+    /** Newest additions to the library — the "New releases" shelf. */
+    suspend fun latestAlbums(limit: Int = 20): List<BaseItem> = apis.jellyfin().getItems(
+        userId = userId(),
+        includeItemTypes = "MusicAlbum",
+        sortBy = "DateCreated",
+        sortOrder = "Descending",
+        limit = limit
+    ).items
+
+    /** Albums the user has actually played recently — the "Listen again" shelf. */
+    suspend fun recentlyPlayedAlbums(limit: Int = 20): List<BaseItem> = apis.jellyfin().getItems(
+        userId = userId(),
+        includeItemTypes = "MusicAlbum",
+        sortBy = "DatePlayed",
+        sortOrder = "Descending",
+        filters = "IsPlayed",
+        limit = limit
+    ).items
+
+    /** Most-played tracks, which seed the Quick picks grid. */
+    suspend fun topSongs(limit: Int = 40): List<BaseItem> = apis.jellyfin().getItems(
+        userId = userId(),
+        includeItemTypes = "Audio",
+        sortBy = "PlayCount",
+        sortOrder = "Descending",
+        limit = limit
+    ).items
+
+    /** Random tracks, used to fill Quick picks on a library with no play history. */
+    suspend fun randomSongs(limit: Int = 40): List<BaseItem> = apis.jellyfin().getItems(
+        userId = userId(),
+        includeItemTypes = "Audio",
+        sortBy = "Random",
+        limit = limit
+    ).items
+
+    suspend fun topArtists(limit: Int = 20): List<BaseItem> = apis.jellyfin().getItems(
+        userId = userId(),
+        includeItemTypes = "MusicArtist",
+        sortBy = "SortName",
+        limit = limit
+    ).items
+
+    suspend fun genres(): List<BaseItem> = apis.jellyfin().getMusicGenres(userId()).items
+
+    suspend fun albumsByGenre(genre: String, limit: Int = 60): List<BaseItem> =
+        apis.jellyfin().getItems(
+            userId = userId(),
+            includeItemTypes = "MusicAlbum",
+            genres = genre,
+            sortBy = "SortName",
+            limit = limit
+        ).items
+
+    suspend fun itemById(id: String): BaseItem? = apis.jellyfin().getItems(
+        userId = userId(),
+        ids = id,
+        recursive = false
+    ).items.firstOrNull()
+
+    /** Server-generated radio seeded from a track, album or artist. */
+    suspend fun instantMix(itemId: String): List<BaseItem> =
+        apis.jellyfin().getInstantMix(itemId, userId()).items
+
     /** Free-text search across artists and albums, used to match Lidarr results. */
     suspend fun search(term: String, types: String, limit: Int = 50): List<BaseItem> =
         apis.jellyfin().getItems(

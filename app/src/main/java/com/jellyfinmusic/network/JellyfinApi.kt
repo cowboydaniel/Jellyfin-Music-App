@@ -27,9 +27,12 @@ interface JellyfinApi {
         @Query("recursive") recursive: Boolean = true,
         @Query("sortBy") sortBy: String? = null,
         @Query("sortOrder") sortOrder: String? = "Ascending",
+        @Query("genres") genres: String? = null,
+        @Query("ids") ids: String? = null,
+        @Query("filters") filters: String? = null,
         @Query("startIndex") startIndex: Int? = null,
         @Query("limit") limit: Int? = null,
-        @Query("fields") fields: String = "PrimaryImageAspectRatio,ChildCount"
+        @Query("fields") fields: String = "PrimaryImageAspectRatio,ChildCount,Genres"
     ): ItemsResponse
 
     @GET("Playlists/{playlistId}/Items")
@@ -37,5 +40,23 @@ interface JellyfinApi {
         @Path("playlistId") playlistId: String,
         @Query("userId") userId: String,
         @Query("fields") fields: String = "PrimaryImageAspectRatio"
+    ): ItemsResponse
+
+    /** Music genres present in the library, used for the Explore mood chips. */
+    @GET("MusicGenres")
+    suspend fun getMusicGenres(
+        @Query("userId") userId: String,
+        @Query("limit") limit: Int = 40
+    ): ItemsResponse
+
+    /**
+     * Server-generated radio seeded from any item — the closest Jellyfin
+     * equivalent of "start radio" on a song or album.
+     */
+    @GET("Items/{itemId}/InstantMix")
+    suspend fun getInstantMix(
+        @Path("itemId") itemId: String,
+        @Query("userId") userId: String,
+        @Query("limit") limit: Int = 100
     ): ItemsResponse
 }
