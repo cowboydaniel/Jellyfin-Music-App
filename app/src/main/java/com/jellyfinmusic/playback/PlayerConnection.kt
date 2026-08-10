@@ -132,6 +132,28 @@ class PlayerConnection @Inject constructor(
         controller?.moveMediaItem(from, to)
     }
 
+    // ---- Sleep timer ------------------------------------------------------
+
+    private val _sleepTimerEndsAt = MutableStateFlow<Long?>(null)
+    val sleepTimerEndsAt: StateFlow<Long?> = _sleepTimerEndsAt.asStateFlow()
+
+    private val sleepRunnable = Runnable {
+        controller?.pause()
+        _sleepTimerEndsAt.value = null
+    }
+
+    /** Pauses playback after [minutes]; passing 0 cancels a running timer. */
+    fun setSleepTimer(minutes: Int) {
+        handler.removeCallbacks(sleepRunnable)
+        if (minutes <= 0) {
+            _sleepTimerEndsAt.value = null
+            return
+        }
+        val delayMs = minutes * 60_000L
+        _sleepTimerEndsAt.value = System.currentTimeMillis() + delayMs
+        handler.postDelayed(sleepRunnable, delayMs)
+    }
+
     private fun syncState() {
         val c = controller ?: return
         val queue = (0 until c.mediaItemCount).map { index ->

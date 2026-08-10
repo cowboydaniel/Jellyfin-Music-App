@@ -146,6 +146,22 @@ class JellyfinRepository @Inject constructor(
         recursive = false
     ).items.firstOrNull()
 
+    /**
+     * An artist's most-played tracks across every album, which is what an
+     * artist page should lead with. Ordering only becomes meaningful once
+     * playback reporting has built up some history; before then it falls back
+     * to alphabetical, which the sort key already handles.
+     */
+    suspend fun topSongsOfArtist(artistId: String, limit: Int = 20): List<BaseItem> =
+        apis.jellyfin().getItems(
+            userId = userId(),
+            includeItemTypes = "Audio",
+            artistIds = artistId,
+            sortBy = "PlayCount,SortName",
+            sortOrder = "Descending",
+            limit = limit
+        ).items.also { noteFavorites(it) }
+
     /** Lyrics for a track, empty when the server has none or is pre-10.9. */
     suspend fun lyrics(itemId: String): List<com.jellyfinmusic.network.LyricLine> =
         runCatching { apis.jellyfin().getLyrics(itemId).lyrics }.getOrDefault(emptyList())

@@ -12,6 +12,7 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.jellyfinmusic.MainActivity
 import com.jellyfinmusic.data.JellyfinRepository
+import com.jellyfinmusic.data.PlaybackReporter
 import com.jellyfinmusic.data.PlaybackStateStore
 import com.jellyfinmusic.data.SavedQueue
 import com.jellyfinmusic.data.SavedTrack
@@ -36,6 +37,8 @@ class MusicService : MediaSessionService() {
 
     @Inject lateinit var repo: JellyfinRepository
 
+    @Inject lateinit var reporter: PlaybackReporter
+
     private var mediaSession: MediaSession? = null
 
     private val handler = Handler(Looper.getMainLooper())
@@ -43,7 +46,13 @@ class MusicService : MediaSessionService() {
     /** Position moves continuously, so it is checkpointed on a timer while playing. */
     private val positionSaver = object : Runnable {
         override fun run() {
-            if (mediaSession?.player?.isPlaying == true) saveState()
+            val player = mediaSession?.player
+            if (player?.isPlaying == true) {
+                saveState()
+                player.currentMediaItem?.let {
+                    reporter.onProgress(it.mediaId, player.currentPosition, isPaused = false)
+                }
+            }
             handler.postDelayed(this, SAVE_INTERVAL_MS)
         }
     }
@@ -63,6 +72,28 @@ class MusicService : MediaSessionService() {
             ) {
                 saveState()
             }
+            reportPlaybackChange(player, events)
+        }
+    }
+
+    /**
+     * Mirrors transport changes to the server: a new track opens a play, and
+     * pausing or resuming updates it. Progress while playing is handled by the
+     * same timer that checkpoints the queue.
+     */
+    private fun reportPlaybackChange(player: Player, events: Player.Events) {
+        val itemId = player.currentMediaItem?.mediaId ?: return
+        when {
+            events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION) ->
+                reporter.onStart(itemId, player.currentPosition)
+
+            events.contains(Player.EVENT_PLAY_WHEN_READY_CHANGED) ||
+                events.contains(Player.EVENT_IS_PLAYING_CHANGED) ->
+                if (player.isPlaying) {
+                    reporter.onStart(itemId, player.currentPosition)
+                } else {
+                    reporter.onProgress(itemId, player.currentPosition, isPaused = true)
+                }
         }
     }
 
@@ -114,6 +145,7 @@ class MusicService : MediaSessionService() {
 
     override fun onDestroy() {
         saveState()
+        mediaSession?.player?.let { reporter.onStop(it.currentMediaItem?.mediaId, it.currentPosition) }
         handler.removeCallbacks(positionSaver)
         mediaSession?.run {
             player.removeListener(listener)

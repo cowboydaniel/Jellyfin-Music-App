@@ -67,9 +67,11 @@ class DetailViewModel @Inject constructor(
         load {
             val header = repo.itemById(artistId)
             val albums = repo.albumsOfArtist(artistId)
-            // Jellyfin has no "artist top tracks" endpoint, so the first album's
-            // tracks stand in as something immediately playable.
-            val tracks = albums.firstOrNull()?.let { repo.tracksOfAlbum(it.id) }.orEmpty()
+            val tracks = runCatching { repo.topSongsOfArtist(artistId) }
+                .getOrDefault(emptyList())
+                // Fall back to the first album if the artist query returns
+                // nothing, so the page is never actionless.
+                .ifEmpty { albums.firstOrNull()?.let { repo.tracksOfAlbum(it.id) }.orEmpty() }
             DetailUiState(header = header, albums = albums, tracks = tracks, isLoading = false)
         }
     }

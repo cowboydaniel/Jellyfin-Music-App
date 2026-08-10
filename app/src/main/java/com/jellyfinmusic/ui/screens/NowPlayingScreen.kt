@@ -5,6 +5,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,7 +29,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
+import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -41,7 +44,9 @@ import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -63,7 +68,10 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
+import androidx.compose.foundation.layout.offset
 import androidx.media3.common.Player
 import com.jellyfinmusic.network.LyricLine
 import com.jellyfinmusic.playback.PlayerConnection
@@ -92,8 +100,11 @@ fun NowPlayingScreen(
     onShowMenu: () -> Unit = {},
     onAddToPlaylist: () -> Unit = {},
     onStartRadio: () -> Unit = {},
-    onLyricsRequested: () -> Unit = {}
+    onLyricsRequested: () -> Unit = {},
+    sleepTimerEndsAt: Long? = null,
+    onSetSleepTimer: (Int) -> Unit = {}
 ) {
+    var showSleepTimer by remember { mutableStateOf(false) }
     var tab by remember { mutableStateOf(PlayerTab.UP_NEXT) }
     var panelOpen by remember { mutableStateOf(false) }
     // While dragging, the slider follows the finger; otherwise the position
@@ -107,6 +118,17 @@ fun NowPlayingScreen(
 
     LaunchedEffect(panelOpen, tab, state.currentItemId) {
         if (panelOpen && tab == PlayerTab.LYRICS) onLyricsRequested()
+    }
+
+    if (showSleepTimer) {
+        SleepTimerDialog(
+            activeUntil = sleepTimerEndsAt,
+            onSelect = {
+                onSetSleepTimer(it)
+                showSleepTimer = false
+            },
+            onDismiss = { showSleepTimer = false }
+        )
     }
 
     Box(
@@ -154,6 +176,12 @@ fun NowPlayingScreen(
                         modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE)
                     )
                 }
+                CircleIcon(
+                    Icons.Filled.Bedtime,
+                    "Sleep timer",
+                    tint = if (sleepTimerEndsAt != null) AppColors.Accent else AppColors.OnBackground,
+                    onClick = { showSleepTimer = true }
+                )
                 CircleIcon(Icons.Filled.MoreVert, "More", onClick = onShowMenu)
             }
 
@@ -366,6 +394,11 @@ private fun ControlIcon(
 @Composable
 private fun QueuePanel(state: PlayerUiState, player: PlayerConnection) {
     val listState = rememberLazyListState()
+    // Index being dragged, and how far it has moved, so the row can follow the
+    // finger before the move is committed to the player.
+    var draggingIndex by remember { mutableStateOf<Int?>(null) }
+    var dragOffset by remember { mutableStateOf(0f) }
+    val rowHeightPx = with(androidx.compose.ui.platform.LocalDensity.current) { 56.dp.toPx() }
     // Keep the playing track in view as the queue advances.
     LaunchedEffect(state.currentIndex) {
         if (state.currentIndex >= 0) {
@@ -375,13 +408,54 @@ private fun QueuePanel(state: PlayerUiState, player: PlayerConnection) {
 
     LazyColumn(Modifier.fillMaxSize(), state = listState) {
         itemsIndexed(state.queue, key = { i, entry -> "$i-${entry.title}" }) { index, entry ->
+            val isDragging = draggingIndex == index
             Row(
                 Modifier
                     .fillMaxWidth()
+                    .zIndex(if (isDragging) 1f else 0f)
+                    .offset { IntOffset(0, if (isDragging) dragOffset.toInt() else 0) }
+                    .background(
+                        if (isDragging) AppColors.SurfaceVariant else Color.Transparent
+                    )
                     .clickable { player.skipToQueueItem(index) }
                     .padding(vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                Icon(
+                    Icons.Filled.DragHandle,
+                    contentDescription = "Reorder",
+                    tint = AppColors.Secondary,
+                    modifier = Modifier
+                        .padding(end = 8.dp)
+                        .pointerInput(index) {
+                            detectDragGesturesAfterLongPress(
+                                onDragStart = {
+                                    draggingIndex = index
+                                    dragOffset = 0f
+                                },
+                                onDragEnd = {
+                                    // Convert the travelled distance into a slot
+                                    // count and commit it once, on release.
+                                    val from = draggingIndex
+                                    if (from != null) {
+                                        val delta = (dragOffset / rowHeightPx).toInt()
+                                        val to = (from + delta)
+                                            .coerceIn(0, state.queue.lastIndex)
+                                        if (to != from) player.moveQueueItem(from, to)
+                                    }
+                                    draggingIndex = null
+                                    dragOffset = 0f
+                                },
+                                onDragCancel = {
+                                    draggingIndex = null
+                                    dragOffset = 0f
+                                }
+                            ) { change, amount ->
+                                change.consume()
+                                dragOffset += amount.y
+                            }
+                        }
+                )
                 Artwork(entry.artworkUrl, Modifier.size(44.dp), shape = RoundedCornerShape(4.dp))
                 Column(
                     Modifier
@@ -510,4 +584,49 @@ private fun RelatedPanel(onStartRadio: () -> Unit) {
             )
         }
     }
+}
+
+/** Presets matching the intervals every music app offers. */
+@Composable
+private fun SleepTimerDialog(
+    activeUntil: Long?,
+    onSelect: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val options = listOf(15, 30, 45, 60, 90)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = AppColors.Surface,
+        title = { Text("Sleep timer") },
+        text = {
+            Column {
+                if (activeUntil != null) {
+                    val minutesLeft =
+                        ((activeUntil - System.currentTimeMillis()) / 60_000L).coerceAtLeast(0)
+                    Text(
+                        "Pausing in about $minutesLeft min",
+                        color = AppColors.Accent,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                }
+                options.forEach { minutes ->
+                    Text(
+                        "$minutes minutes",
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(minutes) }
+                            .padding(vertical = 12.dp)
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            if (activeUntil != null) {
+                TextButton(onClick = { onSelect(0) }) { Text("Turn off") }
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }

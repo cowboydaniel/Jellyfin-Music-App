@@ -170,6 +170,7 @@ private fun AppRoot(startLoggedIn: Boolean, player: PlayerConnection) {
     val playerViewModel: PlayerViewModel = hiltViewModel()
     val favoriteIds by playerViewModel.favoriteIds.collectAsStateWithLifecycle()
     val lyricsState by playerViewModel.lyrics.collectAsStateWithLifecycle()
+    val sleepTimerEndsAt by playerViewModel.sleepTimerEndsAt.collectAsStateWithLifecycle()
 
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
@@ -250,6 +251,7 @@ private fun AppRoot(startLoggedIn: Boolean, player: PlayerConnection) {
                         state = playerState,
                         onPlayPause = player::playPause,
                         onNext = player::next,
+                        onPrevious = player::previous,
                         onExpand = { showNowPlaying = true }
                     )
                 }
@@ -282,7 +284,9 @@ private fun AppRoot(startLoggedIn: Boolean, player: PlayerConnection) {
                 onShowMenu = playerViewModel::showMenuForCurrent,
                 onAddToPlaylist = playerViewModel::addCurrentToPlaylist,
                 onStartRadio = playerViewModel::startRadioFromCurrent,
-                onLyricsRequested = { playerViewModel.loadLyrics(playerState.currentItemId) }
+                onLyricsRequested = { playerViewModel.loadLyrics(playerState.currentItemId) },
+                sleepTimerEndsAt = sleepTimerEndsAt,
+                onSetSleepTimer = playerViewModel::setSleepTimer
             )
         }
     }

@@ -5,6 +5,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,6 +44,7 @@ fun MiniPlayer(
     state: PlayerUiState,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
+    onPrevious: () -> Unit,
     onExpand: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -62,6 +64,28 @@ fun MiniPlayer(
                 detectVerticalDragGestures { _, dragAmount ->
                     // Any meaningful upward drag opens the full player.
                     if (dragAmount < -12f) onExpand()
+                }
+            }
+            .pointerInput(Unit) {
+                // Swipe across the bar to change track, as in YouTube Music.
+                // Accumulated so a slow drag still counts once it passes the
+                // threshold, and reset after each skip.
+                var dragTotal = 0f
+                detectHorizontalDragGestures(
+                    onDragEnd = { dragTotal = 0f },
+                    onDragCancel = { dragTotal = 0f }
+                ) { _, dragAmount ->
+                    dragTotal += dragAmount
+                    when {
+                        dragTotal < -SWIPE_THRESHOLD_PX -> {
+                            onNext()
+                            dragTotal = 0f
+                        }
+                        dragTotal > SWIPE_THRESHOLD_PX -> {
+                            onPrevious()
+                            dragTotal = 0f
+                        }
+                    }
                 }
             }
     ) {
@@ -132,6 +156,9 @@ fun MiniPlayer(
         }
     }
 }
+
+/** Drag distance, in pixels, that counts as a deliberate skip. */
+private const val SWIPE_THRESHOLD_PX = 120f
 
 /** Layers a translucent colour over an opaque one without needing a Canvas. */
 private fun androidx.compose.ui.graphics.Color.compositeOver(

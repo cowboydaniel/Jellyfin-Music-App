@@ -81,11 +81,31 @@ class SettingsStore @Inject constructor(context: Context) {
         publish()
     }
 
+    /** Recent search terms, most recent first. */
+    fun recentSearches(): List<String> =
+        prefs.getString(KEY_RECENT_SEARCHES, "").orEmpty()
+            .split("\n")
+            .filter { it.isNotBlank() }
+
+    fun addRecentSearch(term: String) {
+        val trimmed = term.trim()
+        if (trimmed.isBlank()) return
+        // Re-searching an old term promotes it rather than duplicating it.
+        val updated = (listOf(trimmed) + recentSearches().filterNot { it.equals(trimmed, true) })
+            .take(MAX_RECENT_SEARCHES)
+        prefs.edit().putString(KEY_RECENT_SEARCHES, updated.joinToString("\n")).apply()
+    }
+
+    fun clearRecentSearches() {
+        prefs.edit().remove(KEY_RECENT_SEARCHES).apply()
+    }
+
     fun logout() {
         prefs.edit()
             .remove(KEY_TOKEN)
             .remove(KEY_USER_ID)
             .remove(KEY_USERNAME)
+            .remove(KEY_RECENT_SEARCHES)
             .apply()
         publish()
     }
@@ -100,6 +120,8 @@ class SettingsStore @Inject constructor(context: Context) {
         const val KEY_LIDARR_ROOT = "lidarr_root_folder"
         const val KEY_LIDARR_PROFILE = "lidarr_quality_profile"
         const val KEY_LIDARR_METADATA = "lidarr_metadata_profile"
+        const val KEY_RECENT_SEARCHES = "recent_searches"
+        const val MAX_RECENT_SEARCHES = 12
     }
 }
 

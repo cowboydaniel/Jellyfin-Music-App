@@ -83,6 +83,20 @@ interface JellyfinApi {
     )
 
     /**
+     * Playback reporting. Without these the server never increments play counts
+     * or records a last-played date, so anything ranked on listening history
+     * stays empty no matter how much is played.
+     */
+    @POST("Sessions/Playing")
+    suspend fun reportPlaybackStart(@Body body: PlaybackReport)
+
+    @POST("Sessions/Playing/Progress")
+    suspend fun reportPlaybackProgress(@Body body: PlaybackReport)
+
+    @POST("Sessions/Playing/Stopped")
+    suspend fun reportPlaybackStopped(@Body body: PlaybackReport)
+
+    /**
      * Track lyrics, plain or timestamped. Added in Jellyfin 10.9; older servers
      * return 404, which the UI treats as "no lyrics".
      */

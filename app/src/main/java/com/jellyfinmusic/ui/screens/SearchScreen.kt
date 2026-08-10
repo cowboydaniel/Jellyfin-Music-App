@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
@@ -136,13 +138,59 @@ fun SearchScreen(
         val bottom = contentPadding.calculateBottomPadding() + 24.dp
 
         if (!state.submitted) {
-            Box(Modifier.fillMaxSize(), Alignment.Center) {
-                Text(
-                    "Search your library — or use \"Get more\"\nto request music you don't have yet.",
-                    color = AppColors.Secondary,
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                )
+            if (state.recentSearches.isEmpty()) {
+                Box(Modifier.fillMaxSize(), Alignment.Center) {
+                    Text(
+                        "Search your library — or use \"Get more\"\nto request music you don't have yet.",
+                        color = AppColors.Secondary,
+                        style = MaterialTheme.typography.bodyMedium,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
+            } else {
+                LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = bottom)) {
+                    item {
+                        Row(
+                            Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "Recent searches",
+                                style = MaterialTheme.typography.titleMedium,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(
+                                "Clear",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = AppColors.Secondary,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(50))
+                                    .clickable { viewModel.clearHistory() }
+                                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                            )
+                        }
+                    }
+                    items(state.recentSearches) { term ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    keyboard?.hide()
+                                    viewModel.searchFor(term)
+                                }
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Filled.History,
+                                contentDescription = null,
+                                tint = AppColors.Secondary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(term, modifier = Modifier.padding(start = 16.dp))
+                        }
+                    }
+                }
             }
             return@Column
         }

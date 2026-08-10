@@ -34,7 +34,11 @@ class PlayerViewModel @Inject constructor(
     private val _lyrics = MutableStateFlow(LyricsState())
     val lyrics: StateFlow<LyricsState> = _lyrics
 
+    val sleepTimerEndsAt = player.sleepTimerEndsAt
+
     fun toggleFavorite(itemId: String) = actions.toggleFavoriteById(itemId)
+
+    fun setSleepTimer(minutes: Int) = player.setSleepTimer(minutes)
 
     /** Opens the shared track menu for whatever is playing. */
     fun showMenuForCurrent() {

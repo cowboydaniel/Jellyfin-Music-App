@@ -105,3 +105,14 @@ data class LyricLine(
 ) {
     val startMs: Long? get() = start?.let { it / 10_000L }
 }
+
+@Serializable
+data class PlaybackReport(
+    @SerialName("ItemId") val itemId: String,
+    /** Jellyfin measures position in 100-nanosecond ticks. */
+    @SerialName("PositionTicks") val positionTicks: Long,
+    @SerialName("IsPaused") val isPaused: Boolean = false,
+    @SerialName("CanSeek") val canSeek: Boolean = true,
+    @SerialName("PlayMethod") val playMethod: String = "DirectStream",
+    @SerialName("EventName") val eventName: String? = null
+)

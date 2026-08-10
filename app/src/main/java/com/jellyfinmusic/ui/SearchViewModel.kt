@@ -62,7 +62,8 @@ data class SearchUiState(
     val isRequestLoading: Boolean = false,
     val error: String? = null,
     val message: String? = null,
-    val lidarrConfigured: Boolean = false
+    val lidarrConfigured: Boolean = false,
+    val recentSearches: List<String> = emptyList()
 ) {
     val hasLibraryResults: Boolean
         get() = songs.isNotEmpty() || albums.isNotEmpty() || artists.isNotEmpty()
@@ -92,7 +93,12 @@ class SearchViewModel @Inject constructor(
 
     fun toggleFavorite(item: BaseItem) = actions.toggleFavorite(item)
 
-    private val _state = MutableStateFlow(SearchUiState(lidarrConfigured = settings.current.hasLidarr))
+    private val _state = MutableStateFlow(
+        SearchUiState(
+            lidarrConfigured = settings.current.hasLidarr,
+            recentSearches = settings.recentSearches()
+        )
+    )
     val state: StateFlow<SearchUiState> = _state
 
     private val requested = mutableSetOf<String>()
@@ -102,7 +108,20 @@ class SearchViewModel @Inject constructor(
     }
 
     fun clearQuery() {
-        _state.value = SearchUiState(lidarrConfigured = settings.current.hasLidarr)
+        _state.value = SearchUiState(
+            lidarrConfigured = settings.current.hasLidarr,
+            recentSearches = settings.recentSearches()
+        )
+    }
+
+    fun searchFor(term: String) {
+        _state.value = _state.value.copy(query = term)
+        search()
+    }
+
+    fun clearHistory() {
+        settings.clearRecentSearches()
+        _state.value = _state.value.copy(recentSearches = emptyList())
     }
 
     fun onFilterChange(filter: SearchFilter) {
@@ -120,7 +139,13 @@ class SearchViewModel @Inject constructor(
     fun search() {
         val term = _state.value.query.trim()
         if (term.isBlank()) return
-        _state.value = _state.value.copy(isLoading = true, error = null, submitted = true)
+        settings.addRecentSearch(term)
+        _state.value = _state.value.copy(
+            isLoading = true,
+            error = null,
+            submitted = true,
+            recentSearches = settings.recentSearches()
+        )
 
         viewModelScope.launch {
             runCatching {
