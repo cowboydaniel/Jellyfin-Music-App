@@ -3,6 +3,8 @@ package com.jellyfinmusic.ui.screens
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -35,6 +37,7 @@ import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -176,12 +179,6 @@ fun NowPlayingScreen(
                         modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE)
                     )
                 }
-                CircleIcon(
-                    Icons.Filled.Bedtime,
-                    "Sleep timer",
-                    tint = if (sleepTimerEndsAt != null) AppColors.Accent else AppColors.OnBackground,
-                    onClick = { showSleepTimer = true }
-                )
                 CircleIcon(Icons.Filled.MoreVert, "More", onClick = onShowMenu)
             }
 
@@ -228,18 +225,44 @@ fun NowPlayingScreen(
                             .basicMarquee(iterations = Int.MAX_VALUE)
                     )
                 }
-                CircleIcon(
+            }
+
+            // Action chips under the title, the way YouTube Music groups like,
+            // lyrics and save into one scrolling row.
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(top = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ActionChip(
                     if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                    if (isFavorite) "Remove from Liked songs" else "Save to Liked songs",
-                    tint = if (isFavorite) AppColors.Accent else AppColors.OnBackground,
+                    "Like",
+                    selected = isFavorite,
                     onClick = onToggleFavorite
                 )
-                CircleIcon(
+                ActionChip(
+                    Icons.Filled.Lyrics,
+                    "Lyrics",
+                    selected = panelOpen && tab == PlayerTab.LYRICS,
+                    onClick = {
+                        tab = PlayerTab.LYRICS
+                        panelOpen = true
+                    }
+                )
+                ActionChip(
                     Icons.AutoMirrored.Filled.PlaylistAdd,
-                    "Add to playlist",
+                    "Save",
                     onClick = onAddToPlaylist
                 )
-                CircleIcon(Icons.Filled.Radio, "Start radio", onClick = onStartRadio)
+                ActionChip(Icons.Filled.Radio, "Radio", onClick = onStartRadio)
+                ActionChip(
+                    Icons.Filled.Bedtime,
+                    "Sleep timer",
+                    selected = sleepTimerEndsAt != null,
+                    onClick = { showSleepTimer = true }
+                )
             }
 
             val duration = state.durationMs.coerceAtLeast(1L)
@@ -629,4 +652,35 @@ private fun SleepTimerDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
+}
+
+/** Pill-shaped action used in the player's chip row. */
+@Composable
+private fun ActionChip(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    selected: Boolean = false
+) {
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(50))
+            .background(if (selected) AppColors.OnBackground else AppColors.SurfaceVariant)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = if (selected) AppColors.Background else AppColors.OnBackground,
+            modifier = Modifier.size(18.dp)
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (selected) AppColors.Background else AppColors.OnBackground,
+            modifier = Modifier.padding(start = 6.dp)
+        )
+    }
 }

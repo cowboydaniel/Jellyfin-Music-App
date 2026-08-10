@@ -14,6 +14,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 enum class LibraryTab(val label: String) {
+    DOWNLOADS("Downloads"),
     PLAYLISTS("Playlists"),
     ALBUMS("Albums"),
     ARTISTS("Artists"),
@@ -32,16 +33,18 @@ data class LibraryUiState(
     val isGrid: Boolean = true
 )
 
+@androidx.media3.common.util.UnstableApi
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
     private val repo: JellyfinRepository,
     private val player: PlayerConnection,
-    val actions: ActionsController
+    val actions: ActionsController,
+    private val downloads: com.jellyfinmusic.data.DownloadsController
 ) : ViewModel() {
 
     val favoriteIds = repo.favoriteIds
 
-    private val _state = MutableStateFlow(LibraryUiState())
+    private val _state = MutableStateFlow(LibraryUiState(tab = LibraryTab.PLAYLISTS))
     val state: StateFlow<LibraryUiState> = _state
 
     private val cache = mutableMapOf<LibraryTab, List<BaseItem>>()
@@ -76,6 +79,12 @@ class LibraryViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching {
                 when (tab) {
+                    // Downloads are read from the local cache so the tab works
+                    // with no server connection at all.
+                    LibraryTab.DOWNLOADS -> {
+                        downloads.refresh()
+                        downloads.downloadedTracks.value.map { it.toBaseItem() }
+                    }
                     LibraryTab.PLAYLISTS -> repo.playlists()
                     LibraryTab.ALBUMS -> repo.allAlbums()
                     LibraryTab.ARTISTS -> repo.artists()
@@ -116,4 +125,21 @@ class LibraryViewModel @Inject constructor(
     }
 
     fun imageUrl(item: BaseItem): String? = repo.artworkFor(item)
+
+    /** Plays everything in the current tab in random order. */
+    fun shuffleAll() {
+        val items = _state.value.items
+        if (items.isEmpty()) return
+        if (_state.value.tab == LibraryTab.SONGS || _state.value.tab == LibraryTab.DOWNLOADS) {
+            player.playQueue(items.shuffled().toPlayable(repo), 0)
+        }
+    }
+
+    private fun com.jellyfinmusic.data.SavedTrack.toBaseItem() = BaseItem(
+        id = id,
+        name = title,
+        type = "Audio",
+        albumArtist = artist,
+        album = album
+    )
 }

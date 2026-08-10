@@ -39,6 +39,8 @@ class MusicService : MediaSessionService() {
 
     @Inject lateinit var reporter: PlaybackReporter
 
+    @Inject lateinit var cacheDataSourceFactory: androidx.media3.datasource.cache.CacheDataSource.Factory
+
     private var mediaSession: MediaSession? = null
 
     private val handler = Handler(Looper.getMainLooper())
@@ -101,6 +103,11 @@ class MusicService : MediaSessionService() {
         super.onCreate()
 
         val player = ExoPlayer.Builder(this)
+            // Reads downloaded tracks off disk and streams everything else, so
+            // offline playback needs no separate path.
+            .setMediaSourceFactory(
+                androidx.media3.exoplayer.source.DefaultMediaSourceFactory(cacheDataSourceFactory)
+            )
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)

@@ -1,5 +1,6 @@
 package com.jellyfinmusic.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -35,6 +36,7 @@ import com.jellyfinmusic.ui.SettingsViewModel
 @Composable
 fun SettingsScreen(
     contentPadding: PaddingValues,
+    onOpenDownloads: () -> Unit,
     onLoggedOut: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
@@ -126,6 +128,16 @@ fun SettingsScreen(
                 }
             }
         }
+
+        HorizontalDivider()
+
+        Text(
+            "Downloads and storage",
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onOpenDownloads)
+                .padding(vertical = 16.dp)
+        )
 
         HorizontalDivider()
 

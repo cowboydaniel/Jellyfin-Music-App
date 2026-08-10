@@ -26,6 +26,7 @@ data class DetailUiState(
  * Backs the album, playlist, artist and Liked songs screens: a header plus one
  * or two lists. Which loader the screen calls decides what gets filled in.
  */
+@androidx.media3.common.util.UnstableApi
 @HiltViewModel
 class DetailViewModel @Inject constructor(
     private val repo: JellyfinRepository,
@@ -111,6 +112,11 @@ class DetailViewModel @Inject constructor(
     }
 
     fun toggleFavorite(item: BaseItem) = actions.toggleFavorite(item)
+
+    fun downloadAll() {
+        val label = _state.value.header?.name ?: "these tracks"
+        actions.downloadAll(_state.value.tracks, label)
+    }
 
     fun deleteCurrentPlaylist(onDeleted: () -> Unit) {
         val id = currentPlaylistId ?: return

@@ -7,6 +7,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -26,6 +27,12 @@ sealed interface ActionSheet {
     data class CreatePlaylist(val seedItem: BaseItem?) : ActionSheet
 }
 
+/** Somewhere the action layer wants the app to navigate to. */
+sealed interface NavTarget {
+    data class Album(val id: String, val name: String) : NavTarget
+    data class Artist(val id: String, val name: String) : NavTarget
+}
+
 /**
  * Identifies the playlist a track is being shown from, which is what makes
  * "Remove from this playlist" possible.
@@ -38,10 +45,12 @@ data class PlaylistContext(val playlistId: String, val playlistItemId: String?)
  * keeps a single sheet on screen and one source of truth for the playlist list,
  * rather than each screen growing its own copy.
  */
+@androidx.media3.common.util.UnstableApi
 @Singleton
 class ActionsController @Inject constructor(
     private val repo: JellyfinRepository,
-    private val player: PlayerConnection
+    private val player: PlayerConnection,
+    private val downloads: DownloadsController
 ) {
     private val scope = CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.Main.immediate)
 
@@ -51,6 +60,9 @@ class ActionsController @Inject constructor(
     private val _playlists = MutableStateFlow<List<BaseItem>>(emptyList())
     val playlists: StateFlow<List<BaseItem>> = _playlists.asStateFlow()
 
+    private val _navigation = kotlinx.coroutines.flow.MutableSharedFlow<NavTarget>(extraBufferCapacity = 4)
+    val navigation = _navigation.asSharedFlow()
+
     private val _toast = MutableStateFlow<String?>(null)
     val toast: StateFlow<String?> = _toast.asStateFlow()
 
@@ -59,6 +71,27 @@ class ActionsController @Inject constructor(
     val playlistRevision: StateFlow<Int> = _playlistRevision.asStateFlow()
 
     val favoriteIds: StateFlow<Set<String>> get() = repo.favoriteIds
+
+    val downloadStates: StateFlow<Map<String, DownloadState>> get() = downloads.states
+
+    fun downloadState(itemId: String) = downloads.stateOf(itemId)
+
+    fun toggleDownload(item: BaseItem) {
+        if (downloads.stateOf(item.id) == DownloadState.NONE) {
+            downloads.download(item)
+            _toast.value = "Downloading \"${item.name.orEmpty()}\""
+        } else {
+            downloads.remove(item.id)
+            _toast.value = "Download removed"
+        }
+    }
+
+    /** Downloads a whole album or playlist in one go. */
+    fun downloadAll(items: List<BaseItem>, label: String) {
+        if (items.isEmpty()) return
+        downloads.downloadAll(items)
+        _toast.value = "Downloading $label (${items.size} tracks)"
+    }
 
     fun showTrackMenu(item: BaseItem, playlistContext: PlaylistContext? = null) {
         _sheet.value = ActionSheet.TrackMenu(item, playlistContext)
@@ -82,6 +115,7 @@ class ActionsController @Inject constructor(
     }
 
     fun clearUserState() {
+        downloads.clearForSignOut()
         _playlists.value = emptyList()
         _sheet.value = ActionSheet.None
     }
@@ -112,6 +146,41 @@ class ActionsController @Inject constructor(
                     _toast.value = if (nowFavorite) "Added to Liked songs" else "Removed from Liked songs"
                 }
                 .onFailure { _toast.value = it.message ?: "Could not update Liked songs" }
+        }
+    }
+
+    /** Opens the album a track belongs to, if the server reported one. */
+    fun goToAlbum(item: BaseItem) {
+        val albumId = item.albumId
+        if (albumId.isNullOrBlank()) {
+            _toast.value = "No album for this track"
+            return
+        }
+        dismissSheet()
+        _navigation.tryEmit(NavTarget.Album(albumId, item.album.orEmpty()))
+    }
+
+    fun goToArtist(item: BaseItem) {
+        val artist = item.artistItems.firstOrNull { !it.id.isNullOrBlank() }
+        if (artist?.id == null) {
+            _toast.value = "No artist for this track"
+            return
+        }
+        dismissSheet()
+        _navigation.tryEmit(NavTarget.Artist(artist.id, artist.name.orEmpty()))
+    }
+
+    /** Server-generated radio seeded from this track. */
+    fun startMix(item: BaseItem) {
+        dismissSheet()
+        scope.launch {
+            val mix = runCatching { repo.instantMix(item.id) }.getOrDefault(emptyList())
+            if (mix.isEmpty()) {
+                _toast.value = "No mix available for this track"
+                return@launch
+            }
+            player.playQueue(mix.map { it.toTrack() }, 0)
+            _toast.value = "Started a mix"
         }
     }
 

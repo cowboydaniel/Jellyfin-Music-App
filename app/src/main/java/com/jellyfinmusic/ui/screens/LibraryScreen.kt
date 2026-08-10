@@ -24,6 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -61,6 +62,7 @@ fun LibraryScreen(
     val favorites by viewModel.favoriteIds.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { viewModel.loadOnce() }
 
+    Box(Modifier.fillMaxSize()) {
     Column(
         Modifier
             .fillMaxSize()
@@ -102,7 +104,8 @@ fun LibraryScreen(
         ) {
             // Songs are always a list; everything else honours the grid toggle,
             // since artwork is the point for albums, artists and playlists.
-            if (state.tab == LibraryTab.SONGS || !state.isGrid) {
+            val isTrackList = state.tab == LibraryTab.SONGS || state.tab == LibraryTab.DOWNLOADS
+            if (isTrackList || !state.isGrid) {
                 LazyColumn(
                     Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(top = 8.dp, bottom = bottom)
@@ -115,16 +118,24 @@ fun LibraryScreen(
                             title = item.name.orEmpty(),
                             subtitle = subtitleFor(item, state.tab),
                             artworkUrl = viewModel.imageUrl(item),
-                            onClick = { onItemClick(item, state.tab, onAlbumClick, onArtistClick, onPlaylistClick) { viewModel.playSongs(index) } },
+                            onClick = {
+                                onItemClick(
+                                    item,
+                                    state.tab,
+                                    onAlbumClick,
+                                    onArtistClick,
+                                    onPlaylistClick
+                                ) { viewModel.playSongs(index) }
+                            },
                             isArtist = state.tab == LibraryTab.ARTISTS,
                             artShape = if (state.tab == LibraryTab.ARTISTS) CircleShape else androidx.compose.foundation.shape.RoundedCornerShape(4.dp),
                             isFavorite = item.id in favorites,
-                            onFavoriteClick = if (state.tab == LibraryTab.SONGS) {
+                            onFavoriteClick = if (isTrackList) {
                                 { viewModel.toggleFavorite(item) }
                             } else {
                                 null
                             },
-                            onMenuClick = if (state.tab == LibraryTab.SONGS) {
+                            onMenuClick = if (isTrackList) {
                                 { viewModel.showMenu(item) }
                             } else {
                                 null
@@ -170,9 +181,42 @@ fun LibraryScreen(
             }
         }
     }
+
+        // Floating shuffle, as YouTube Music offers over its library lists.
+        val isTrackTab = state.tab == LibraryTab.SONGS || state.tab == LibraryTab.DOWNLOADS
+        if (isTrackTab && state.items.isNotEmpty()) {
+            Row(
+                Modifier
+                    .align(androidx.compose.ui.Alignment.BottomEnd)
+                    .padding(
+                        end = 16.dp,
+                        bottom = contentPadding.calculateBottomPadding() + 16.dp
+                    )
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
+                    .background(AppColors.OnBackground)
+                    .clickable { viewModel.shuffleAll() }
+                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Filled.Shuffle,
+                    contentDescription = null,
+                    tint = AppColors.Background,
+                    modifier = Modifier.size(20.dp)
+                )
+                Text(
+                    "Shuffle all",
+                    color = AppColors.Background,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(start = 8.dp)
+                )
+            }
+        }
+    }
 }
 
 private fun subtitleFor(item: BaseItem, tab: LibraryTab): String = when (tab) {
+    LibraryTab.DOWNLOADS -> listOfNotNull(item.artistName, "Downloaded").joinToString(" · ")
     LibraryTab.PLAYLISTS -> item.childCount?.let { "Playlist · $it tracks" } ?: "Playlist"
     LibraryTab.ALBUMS -> listOfNotNull(item.artistName, item.productionYear?.toString()).joinToString(" · ")
     LibraryTab.ARTISTS -> "Artist"
@@ -191,6 +235,7 @@ private inline fun onItemClick(
     onSongClick: () -> Unit
 ) {
     when (tab) {
+        LibraryTab.DOWNLOADS -> onSongClick()
         LibraryTab.PLAYLISTS -> onPlaylistClick(item)
         LibraryTab.ALBUMS -> onAlbumClick(item)
         LibraryTab.ARTISTS -> onArtistClick(item)

@@ -7,6 +7,7 @@ import com.jellyfinmusic.network.BaseItem
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 
+@androidx.media3.common.util.UnstableApi
 @HiltViewModel
 class ActionsViewModel @Inject constructor(
     val actions: ActionsController,
@@ -17,6 +18,7 @@ class ActionsViewModel @Inject constructor(
     val playlists = actions.playlists
     val toast = actions.toast
     val favoriteIds = actions.favoriteIds
+    val downloadStates = actions.downloadStates
 
     fun imageUrl(item: BaseItem): String? = repo.artworkFor(item)
 }

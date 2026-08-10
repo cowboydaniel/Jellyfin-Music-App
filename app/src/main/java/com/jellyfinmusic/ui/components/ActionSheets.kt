@@ -1,10 +1,13 @@
 package com.jellyfinmusic.ui.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -20,6 +23,12 @@ import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DownloadDone
+import androidx.compose.material.icons.filled.Downloading
+import androidx.compose.material.icons.filled.Album
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material3.Button
@@ -40,6 +49,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -50,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.jellyfinmusic.data.ActionSheet
+import com.jellyfinmusic.data.DownloadState
 import com.jellyfinmusic.network.BaseItem
 import com.jellyfinmusic.ui.ActionsViewModel
 import com.jellyfinmusic.ui.theme.AppColors
@@ -67,6 +78,7 @@ fun ActionSheetHost(
     val sheet by viewModel.sheet.collectAsStateWithLifecycle()
     val toast by viewModel.toast.collectAsStateWithLifecycle()
     val favorites by viewModel.favoriteIds.collectAsStateWithLifecycle()
+    val downloadStates by viewModel.downloadStates.collectAsStateWithLifecycle()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     LaunchedEffect(toast) {
@@ -91,6 +103,11 @@ fun ActionSheetHost(
                 item = current.item,
                 isFavorite = current.item.id in favorites,
                 canRemoveFromPlaylist = current.playlistContext != null,
+                downloadState = downloadStates[current.item.id] ?: DownloadState.NONE,
+                onToggleDownload = {
+                    viewModel.actions.toggleDownload(current.item)
+                    viewModel.actions.dismissSheet()
+                },
                 artworkUrl = viewModel.imageUrl(current.item),
                 onPlayNext = {
                     viewModel.actions.playNext(current.item)
@@ -105,6 +122,9 @@ fun ActionSheetHost(
                     viewModel.actions.dismissSheet()
                 },
                 onAddToPlaylist = { viewModel.actions.showAddToPlaylist(current.item) },
+                onStartMix = { viewModel.actions.startMix(current.item) },
+                onGoToAlbum = { viewModel.actions.goToAlbum(current.item) },
+                onGoToArtist = { viewModel.actions.goToArtist(current.item) },
                 onRemoveFromPlaylist = {
                     current.playlistContext?.let(viewModel.actions::removeFromPlaylist)
                 }
@@ -135,11 +155,16 @@ private fun TrackMenuSheet(
     item: BaseItem,
     isFavorite: Boolean,
     canRemoveFromPlaylist: Boolean,
+    downloadState: DownloadState,
+    onToggleDownload: () -> Unit,
     artworkUrl: String?,
     onPlayNext: () -> Unit,
     onAddToQueue: () -> Unit,
     onToggleFavorite: () -> Unit,
     onAddToPlaylist: () -> Unit,
+    onStartMix: () -> Unit,
+    onGoToAlbum: () -> Unit,
+    onGoToArtist: () -> Unit,
     onRemoveFromPlaylist: () -> Unit
 ) {
     Column(Modifier.padding(bottom = 24.dp)) {
@@ -155,7 +180,7 @@ private fun TrackMenuSheet(
                     .weight(1f)
                     .padding(start = 12.dp)
             ) {
-                Text(item.name.orEmpty(), maxLines = 1, style = MaterialTheme.typography.bodyLarge)
+                Text(item.name.orEmpty(), maxLines = 2, style = MaterialTheme.typography.titleMedium)
                 Text(
                     item.artistName.orEmpty(),
                     maxLines = 1,
@@ -163,18 +188,60 @@ private fun TrackMenuSheet(
                     color = AppColors.Secondary
                 )
             }
+            Icon(
+                if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                contentDescription = "Like",
+                tint = if (isFavorite) AppColors.Accent else AppColors.OnBackground,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .clickable(onClick = onToggleFavorite)
+                    .padding(8.dp)
+            )
         }
         HorizontalDivider(color = AppColors.SurfaceVariant)
 
-        SheetAction(
-            if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-            if (isFavorite) "Remove from Liked songs" else "Save to Liked songs",
-            tint = if (isFavorite) AppColors.Accent else AppColors.OnBackground,
-            onClick = onToggleFavorite
-        )
-        SheetAction(Icons.AutoMirrored.Filled.PlaylistPlay, "Play next", onClick = onPlayNext)
+        // The three most common actions get large tiles, as they do in
+        // YouTube Music, ahead of the full list.
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            QuickTile(
+                Icons.AutoMirrored.Filled.PlaylistPlay,
+                "Play next",
+                Modifier.weight(1f),
+                onPlayNext
+            )
+            QuickTile(
+                Icons.AutoMirrored.Filled.PlaylistAdd,
+                "Save to playlist",
+                Modifier.weight(1f),
+                onAddToPlaylist
+            )
+            QuickTile(
+                when (downloadState) {
+                    DownloadState.DOWNLOADED -> Icons.Filled.DownloadDone
+                    DownloadState.DOWNLOADING -> Icons.Filled.Downloading
+                    else -> Icons.Filled.Download
+                },
+                when (downloadState) {
+                    DownloadState.DOWNLOADED -> "Downloaded"
+                    DownloadState.DOWNLOADING -> "Downloading"
+                    else -> "Download"
+                },
+                Modifier.weight(1f),
+                onToggleDownload,
+                tint = if (downloadState == DownloadState.DOWNLOADED) AppColors.Accent else AppColors.OnBackground
+            )
+        }
+        HorizontalDivider(color = AppColors.SurfaceVariant)
+
+        SheetAction(Icons.Filled.Podcasts, "Start mix", onClick = onStartMix)
         SheetAction(Icons.AutoMirrored.Filled.QueueMusic, "Add to queue", onClick = onAddToQueue)
-        SheetAction(Icons.AutoMirrored.Filled.PlaylistAdd, "Add to playlist", onClick = onAddToPlaylist)
+        SheetAction(Icons.Filled.Album, "Go to album", onClick = onGoToAlbum)
+        SheetAction(Icons.Filled.Person, "Go to artist", onClick = onGoToArtist)
         if (canRemoveFromPlaylist) {
             SheetAction(
                 Icons.Filled.Delete,
@@ -316,6 +383,40 @@ private fun SheetAction(
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.Normal,
             modifier = Modifier.padding(start = 16.dp)
+        )
+    }
+}
+
+/** Large square action used for the sheet's top row. */
+@Composable
+private fun QuickTile(
+    icon: ImageVector,
+    label: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+    tint: Color = AppColors.OnBackground
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(AppColors.SurfaceVariant)
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, contentDescription = null, tint = tint)
+        }
+        Text(
+            label,
+            style = MaterialTheme.typography.bodySmall,
+            color = AppColors.Secondary,
+            maxLines = 1,
+            modifier = Modifier.padding(top = 6.dp)
         )
     }
 }

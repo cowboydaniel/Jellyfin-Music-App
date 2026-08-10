@@ -47,7 +47,9 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -64,15 +66,18 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.jellyfinmusic.data.NavTarget
 import com.jellyfinmusic.data.SettingsStore
 import com.jellyfinmusic.network.BaseItem
 import com.jellyfinmusic.playback.PlayerConnection
+import com.jellyfinmusic.ui.ActionsViewModel
 import com.jellyfinmusic.ui.LibraryViewModel
 import com.jellyfinmusic.ui.PlayerViewModel
 import com.jellyfinmusic.ui.components.ActionSheetHost
 import com.jellyfinmusic.ui.components.MiniPlayer
 import com.jellyfinmusic.ui.screens.AlbumDetailScreen
 import com.jellyfinmusic.ui.screens.ArtistDetailScreen
+import com.jellyfinmusic.ui.screens.DownloadsSettingsScreen
 import com.jellyfinmusic.ui.screens.ExploreScreen
 import com.jellyfinmusic.ui.screens.HomeScreen
 import com.jellyfinmusic.ui.screens.LibraryScreen
@@ -146,6 +151,7 @@ private object Routes {
     const val ALBUM = "album/{id}/{title}/{isPlaylist}"
     const val ARTIST = "artist/{id}/{name}"
     const val LIKED = "liked"
+    const val DOWNLOADS_SETTINGS = "downloads_settings"
 
     fun album(id: String, title: String, isPlaylist: Boolean) =
         "album/$id/${title.encode()}/$isPlaylist"
@@ -179,6 +185,23 @@ private fun AppRoot(startLoggedIn: Boolean, player: PlayerConnection) {
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+
+    // "Go to album" / "Go to artist" are triggered from a bottom sheet, which
+    // has no navigation of its own, so the request comes back through here.
+    val actionsViewModel: ActionsViewModel = hiltViewModel()
+    LaunchedEffect(Unit) {
+        actionsViewModel.actions.navigation.collect { target ->
+            showNowPlaying = false
+            when (target) {
+                is NavTarget.Album -> navController.navigate(
+                    Routes.album(target.id, target.name, isPlaylist = false)
+                )
+                is NavTarget.Artist -> navController.navigate(
+                    Routes.artist(target.id, target.name)
+                )
+            }
+        }
+    }
 
     Box(Modifier.fillMaxSize().background(AppColors.Background)) {
         Scaffold(
@@ -388,6 +411,10 @@ private fun NavGraph(
             LikedSongsScreen(contentPadding = contentPadding)
         }
 
+        composable(Routes.DOWNLOADS_SETTINGS) {
+            DownloadsSettingsScreen(contentPadding = contentPadding)
+        }
+
         composable(Routes.ARTIST) { entry ->
             ArtistDetailScreen(
                 artistId = entry.arguments?.getString("id").orEmpty(),
@@ -400,6 +427,7 @@ private fun NavGraph(
         composable(Routes.SETTINGS) {
             SettingsScreen(
                 contentPadding = contentPadding,
+                onOpenDownloads = { navController.navigate(Routes.DOWNLOADS_SETTINGS) },
                 onLoggedOut = {
                     navController.navigate(Routes.LOGIN) {
                         popUpTo(0) { inclusive = true }
@@ -459,5 +487,6 @@ private fun titleFor(route: String?, args: android.os.Bundle?): String = when (r
     Routes.ALBUM -> args?.getString("title").decode().ifBlank { "Album" }
     Routes.ARTIST -> args?.getString("name").decode().ifBlank { "Artist" }
     Routes.LIKED -> "Liked songs"
+    Routes.DOWNLOADS_SETTINGS -> "Downloads and storage"
     else -> "Jellyfin Music"
 }

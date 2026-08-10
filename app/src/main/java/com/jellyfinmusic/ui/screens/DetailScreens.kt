@@ -1,14 +1,15 @@
 package com.jellyfinmusic.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -21,6 +22,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.PlayArrow
@@ -45,6 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -110,9 +113,17 @@ fun AlbumDetailScreen(
                         "${state.tracks.size} tracks"
                     ).joinToString(" · "),
                     artworkUrl = header?.let { viewModel.imageUrl(it) },
+                    // Playlists rarely have their own art, so a mosaic of the
+                    // first few tracks stands in, as YouTube Music does.
+                    mosaicUrls = if (isPlaylist && header?.imageTags?.get("Primary") == null) {
+                        state.tracks.take(4).mapNotNull { viewModel.imageUrl(it) }
+                    } else {
+                        emptyList()
+                    },
                     onPlay = { viewModel.playAll(shuffle = false) },
                     onShuffle = { viewModel.playAll(shuffle = true) },
                     onRadio = viewModel::startRadio,
+                    onDownload = viewModel::downloadAll,
                     onDelete = if (isPlaylist) ({ confirmDelete = true }) else null
                 )
             }
@@ -228,7 +239,9 @@ private fun DetailHeader(
     onPlay: () -> Unit,
     onShuffle: () -> Unit,
     onRadio: () -> Unit,
-    onDelete: (() -> Unit)? = null
+    onDownload: () -> Unit,
+    onDelete: (() -> Unit)? = null,
+    mosaicUrls: List<String> = emptyList()
 ) {
     Column(
         Modifier
@@ -241,14 +254,36 @@ private fun DetailHeader(
             .padding(bottom = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Artwork(
-            artworkUrl,
-            Modifier
-                .padding(top = 16.dp)
-                .fillMaxWidth(0.6f)
-                .aspectRatio(1f),
-            shape = RoundedCornerShape(10.dp)
-        )
+        if (mosaicUrls.size >= 4) {
+            Column(
+                Modifier
+                    .padding(top = 16.dp)
+                    .fillMaxWidth(0.6f)
+                    .aspectRatio(1f)
+                    .clip(RoundedCornerShape(10.dp))
+            ) {
+                listOf(mosaicUrls.take(2), mosaicUrls.drop(2).take(2)).forEach { row ->
+                    Row(Modifier.weight(1f)) {
+                        row.forEach { url ->
+                            Artwork(
+                                url,
+                                Modifier.weight(1f).fillMaxHeight(),
+                                shape = RoundedCornerShape(0.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        } else {
+            Artwork(
+                artworkUrl,
+                Modifier
+                    .padding(top = 16.dp)
+                    .fillMaxWidth(0.6f)
+                    .aspectRatio(1f),
+                shape = RoundedCornerShape(10.dp)
+            )
+        }
         Text(
             title,
             style = MaterialTheme.typography.headlineSmall,
@@ -264,31 +299,28 @@ private fun DetailHeader(
         )
         Row(
             Modifier.padding(vertical = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Button(
-                onClick = onPlay,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = AppColors.OnBackground,
-                    contentColor = AppColors.Background
-                )
+            RoundAction(Icons.Filled.Shuffle, "Shuffle", onShuffle)
+            RoundAction(Icons.Filled.Radio, "Radio", onRadio)
+            Box(
+                Modifier
+                    .size(64.dp)
+                    .clip(CircleShape)
+                    .background(AppColors.OnBackground)
+                    .clickable(onClick = onPlay),
+                contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Filled.PlayArrow, contentDescription = null, Modifier.size(20.dp))
-                Text("Play", Modifier.padding(start = 6.dp))
+                Icon(
+                    Icons.Filled.PlayArrow,
+                    contentDescription = "Play",
+                    tint = AppColors.Background,
+                    modifier = Modifier.size(34.dp)
+                )
             }
-            OutlinedButton(onClick = onShuffle) {
-                Icon(Icons.Filled.Shuffle, contentDescription = null, Modifier.size(18.dp))
-                Text("Shuffle", Modifier.padding(start = 6.dp))
-            }
-            OutlinedButton(onClick = onRadio) {
-                Icon(Icons.Filled.Radio, contentDescription = null, Modifier.size(18.dp))
-                Text("Radio", Modifier.padding(start = 6.dp))
-            }
-            onDelete?.let {
-                OutlinedButton(onClick = it) {
-                    Icon(Icons.Filled.Delete, contentDescription = "Delete playlist", Modifier.size(18.dp))
-                }
-            }
+            RoundAction(Icons.Filled.Download, "Download", onDownload)
+            onDelete?.let { RoundAction(Icons.Filled.Delete, "Delete playlist", it) }
         }
     }
 }
@@ -354,5 +386,25 @@ private fun ArtistHeader(
                 }
             }
         }
+    }
+}
+
+/** Circular secondary action used around the header's play button. */
+@Composable
+private fun RoundAction(icon: ImageVector, description: String, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .background(AppColors.SurfaceVariant)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            icon,
+            contentDescription = description,
+            tint = AppColors.OnBackground,
+            modifier = Modifier.size(20.dp)
+        )
     }
 }

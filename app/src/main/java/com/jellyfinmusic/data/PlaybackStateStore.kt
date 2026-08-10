@@ -32,7 +32,9 @@ data class SavedTrack(
     val artist: String,
     val album: String,
     val artworkUrl: String? = null
-)
+) {
+    companion object
+}
 
 /**
  * Persists the playing queue so a relaunch resumes where the user left off.

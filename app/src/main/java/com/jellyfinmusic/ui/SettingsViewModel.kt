@@ -31,14 +31,27 @@ data class SettingsUiState(
     val error: String? = null
 )
 
+@androidx.media3.common.util.UnstableApi
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val settings: SettingsStore,
     private val lidarr: LidarrRepository,
     private val jellyfin: JellyfinRepository,
     private val actions: ActionsController,
-    private val playbackState: PlaybackStateStore
+    private val playbackState: PlaybackStateStore,
+    private val downloads: com.jellyfinmusic.data.DownloadsController
 ) : ViewModel() {
+
+    val downloadedTracks = downloads.downloadedTracks
+
+    fun refreshDownloads() = downloads.refresh()
+
+    fun downloadCacheBytes(): Long = downloads.cacheSizeBytes()
+
+    fun clearDownloads() {
+        downloads.removeAll()
+        downloads.refresh()
+    }
 
     private val _state = MutableStateFlow(
         settings.current.let {
