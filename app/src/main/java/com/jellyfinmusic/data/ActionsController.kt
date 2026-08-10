@@ -25,6 +25,12 @@ sealed interface ActionSheet {
 
     /** Name entry for a new playlist; [seedItem] becomes its first track. */
     data class CreatePlaylist(val seedItem: BaseItem?) : ActionSheet
+
+    /** Actions on a playlist itself rather than a track inside it. */
+    data class PlaylistMenu(val playlist: BaseItem) : ActionSheet
+
+    /** Rename entry for an existing playlist. */
+    data class RenamePlaylist(val playlist: BaseItem) : ActionSheet
 }
 
 /** A share sheet payload, handed out for the host to fire as an intent. */
@@ -139,6 +145,50 @@ class ActionsController @Inject constructor(
     fun showAddToPlaylist(item: BaseItem) {
         _sheet.value = ActionSheet.AddToPlaylist(item)
         refreshPlaylists()
+    }
+
+    fun showPlaylistMenu(playlist: BaseItem) {
+        _sheet.value = ActionSheet.PlaylistMenu(playlist)
+    }
+
+    fun showRenamePlaylist(playlist: BaseItem) {
+        _sheet.value = ActionSheet.RenamePlaylist(playlist)
+    }
+
+    fun renamePlaylist(playlist: BaseItem, name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isBlank()) return
+        scope.launch {
+            runCatching { repo.renamePlaylist(playlist.id, trimmed) }
+                .onSuccess {
+                    _toast.value = "Renamed to \"$trimmed\""
+                    _playlistRevision.value++
+                    refreshPlaylists()
+                    dismissSheet()
+                }
+                .onFailure { _toast.value = it.message ?: "Could not rename the playlist" }
+        }
+    }
+
+    /** Asks the host to open an image picker for [playlist]'s cover. */
+    private val _pickImageFor = kotlinx.coroutines.flow.MutableSharedFlow<BaseItem>(extraBufferCapacity = 2)
+    val pickImageFor = _pickImageFor.asSharedFlow()
+
+    fun requestCoverArt(playlist: BaseItem) {
+        dismissSheet()
+        _pickImageFor.tryEmit(playlist)
+    }
+
+    fun setCoverArt(playlistId: String, jpegBytes: ByteArray) {
+        scope.launch {
+            runCatching { repo.uploadPrimaryImage(playlistId, jpegBytes) }
+                .onSuccess {
+                    _toast.value = "Cover updated"
+                    _playlistRevision.value++
+                    refreshPlaylists()
+                }
+                .onFailure { _toast.value = it.message ?: "Could not update the cover" }
+        }
     }
 
     fun showCreatePlaylist(seedItem: BaseItem?) {

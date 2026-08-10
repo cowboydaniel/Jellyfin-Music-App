@@ -4,6 +4,8 @@ import com.jellyfinmusic.network.ApiProvider
 import com.jellyfinmusic.network.AuthenticateRequest
 import com.jellyfinmusic.network.BaseItem
 import com.jellyfinmusic.network.CreatePlaylistRequest
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -31,10 +33,14 @@ class JellyfinRepository @Inject constructor(
             settings.saveSession(base, token, userId, result.user?.name ?: username)
         }
 
-    suspend fun artists(): List<BaseItem> = apis.jellyfin().getItems(
+    suspend fun artists(
+        sortBy: String = "SortName",
+        sortOrder: String = "Ascending"
+    ): List<BaseItem> = apis.jellyfin().getItems(
         userId = userId(),
         includeItemTypes = "MusicArtist",
-        sortBy = "SortName"
+        sortBy = sortBy,
+        sortOrder = sortOrder
     ).items
 
     suspend fun albumsOfArtist(artistId: String): List<BaseItem> = apis.jellyfin().getItems(
@@ -70,22 +76,42 @@ class JellyfinRepository @Inject constructor(
         ).items.filter { it.ownerUserId == null || it.ownerUserId == me }
     }
 
+    suspend fun playlists(sortBy: String, sortOrder: String): List<BaseItem> {
+        val me = userId()
+        return apis.jellyfin().getItems(
+            userId = me,
+            includeItemTypes = "Playlist",
+            sortBy = sortBy,
+            sortOrder = sortOrder
+        ).items.filter { it.ownerUserId == null || it.ownerUserId == me }
+    }
+
     suspend fun playlistTracks(playlistId: String): List<BaseItem> =
         apis.jellyfin().getPlaylistItems(playlistId, userId()).items.also { noteFavorites(it) }
 
-    suspend fun allAlbums(limit: Int? = null): List<BaseItem> = apis.jellyfin().getItems(
+    suspend fun allAlbums(
+        limit: Int? = null,
+        sortBy: String = "SortName",
+        sortOrder: String = "Ascending"
+    ): List<BaseItem> = apis.jellyfin().getItems(
         userId = userId(),
         includeItemTypes = "MusicAlbum",
-        sortBy = "SortName",
+        sortBy = sortBy,
+        sortOrder = sortOrder,
         limit = limit
     ).items
 
-    suspend fun allSongs(limit: Int = 500): List<BaseItem> = apis.jellyfin().getItems(
+    suspend fun allSongs(
+        limit: Int = 500,
+        sortBy: String = "SortName",
+        sortOrder: String = "Ascending"
+    ): List<BaseItem> = apis.jellyfin().getItems(
         userId = userId(),
         includeItemTypes = "Audio",
-        sortBy = "SortName",
+        sortBy = sortBy,
+        sortOrder = sortOrder,
         limit = limit
-    ).items
+    ).items.also { noteFavorites(it) }
 
     /** Newest additions to the library — the "New releases" shelf. */
     suspend fun latestAlbums(limit: Int = 20): List<BaseItem> = apis.jellyfin().getItems(
@@ -337,6 +363,24 @@ class JellyfinRepository @Inject constructor(
     }
 
     suspend fun deletePlaylist(playlistId: String) = apis.jellyfin().deleteItem(playlistId)
+
+    suspend fun renamePlaylist(playlistId: String, name: String) {
+        apis.jellyfin().updatePlaylist(
+            playlistId,
+            com.jellyfinmusic.network.UpdatePlaylistRequest(name.trim())
+        )
+    }
+
+    /** Sets an item's primary image from raw JPEG bytes. */
+    suspend fun uploadPrimaryImage(itemId: String, jpegBytes: ByteArray) {
+        val base64 = android.util.Base64.encodeToString(jpegBytes, android.util.Base64.NO_WRAP)
+        apis.jellyfin().uploadImage(
+            itemId = itemId,
+            imageType = "Primary",
+            contentType = "image/jpeg",
+            body = base64.toRequestBody("image/jpeg".toMediaType())
+        )
+    }
 
     /** Free-text search across artists and albums, used to match Lidarr results. */
     suspend fun search(term: String, types: String, limit: Int = 50): List<BaseItem> =

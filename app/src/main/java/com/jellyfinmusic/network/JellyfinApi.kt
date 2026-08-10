@@ -3,6 +3,7 @@ package com.jellyfinmusic.network
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.Header
 import retrofit2.http.POST
 import retrofit2.http.Path
 import retrofit2.http.Query
@@ -45,6 +46,25 @@ interface JellyfinApi {
 
     @POST("Playlists")
     suspend fun createPlaylist(@Body body: CreatePlaylistRequest): CreatePlaylistResponse
+
+    /** Renames a playlist. Jellyfin 10.9+ exposes this as a playlist update. */
+    @POST("Playlists/{playlistId}")
+    suspend fun updatePlaylist(
+        @Path("playlistId") playlistId: String,
+        @Body body: UpdatePlaylistRequest
+    )
+
+    /**
+     * Replaces an item's artwork. Jellyfin expects the image base64-encoded in
+     * the body rather than as a multipart upload.
+     */
+    @POST("Items/{itemId}/Images/{imageType}")
+    suspend fun uploadImage(
+        @Path("itemId") itemId: String,
+        @Path("imageType") imageType: String,
+        @Header("Content-Type") contentType: String,
+        @Body body: okhttp3.RequestBody
+    )
 
     @POST("Playlists/{playlistId}/Items")
     suspend fun addToPlaylist(

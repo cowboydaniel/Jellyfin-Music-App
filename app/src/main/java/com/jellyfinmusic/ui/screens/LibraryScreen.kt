@@ -23,7 +23,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -32,6 +34,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -39,6 +44,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.jellyfinmusic.network.BaseItem
+import com.jellyfinmusic.ui.LibrarySort
 import com.jellyfinmusic.ui.LibraryTab
 import com.jellyfinmusic.ui.LibraryViewModel
 import com.jellyfinmusic.ui.components.AlbumCard
@@ -56,8 +62,10 @@ fun LibraryScreen(
     onAlbumClick: (BaseItem) -> Unit,
     onArtistClick: (BaseItem) -> Unit,
     onPlaylistClick: (BaseItem) -> Unit,
-    onLikedSongsClick: () -> Unit
+    onLikedSongsClick: () -> Unit,
+    onHistoryClick: () -> Unit
 ) {
+    var sortMenuOpen by remember { mutableStateOf(false) }
     val state by viewModel.state.collectAsStateWithLifecycle()
     val favorites by viewModel.favoriteIds.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { viewModel.loadOnce() }
@@ -84,12 +92,56 @@ fun LibraryScreen(
                     )
                 }
             }
+            IconButton(onClick = onHistoryClick) {
+                Icon(
+                    Icons.Filled.History,
+                    contentDescription = "History",
+                    tint = AppColors.Secondary
+                )
+            }
             IconButton(onClick = viewModel::toggleLayout) {
                 Icon(
                     if (state.isGrid) Icons.AutoMirrored.Filled.List else Icons.Filled.GridView,
                     contentDescription = "Toggle layout",
                     tint = AppColors.Secondary
                 )
+            }
+        }
+
+        // Artists have no played or added date, so ordering them is meaningless.
+        if (state.tab != LibraryTab.ARTISTS && state.tab != LibraryTab.DOWNLOADS) {
+            Box {
+                Row(
+                    Modifier
+                        .clickable { sortMenuOpen = true }
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                ) {
+                    Text(
+                        state.sort.label,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = AppColors.Secondary
+                    )
+                    Icon(
+                        Icons.Filled.ArrowDropDown,
+                        contentDescription = "Change order",
+                        tint = AppColors.Secondary
+                    )
+                }
+                androidx.compose.material3.DropdownMenu(
+                    expanded = sortMenuOpen,
+                    onDismissRequest = { sortMenuOpen = false }
+                ) {
+                    LibrarySort.entries.forEach { option ->
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text(option.label) },
+                            onClick = {
+                                viewModel.setSort(option)
+                                sortMenuOpen = false
+                            }
+                        )
+                    }
+                }
             }
         }
 
@@ -135,10 +187,11 @@ fun LibraryScreen(
                             } else {
                                 null
                             },
-                            onMenuClick = if (isTrackList) {
-                                { viewModel.showMenu(item) }
-                            } else {
-                                null
+                            onMenuClick = when {
+                                isTrackList -> ({ viewModel.showMenu(item) })
+                                state.tab == LibraryTab.PLAYLISTS ->
+                                    ({ viewModel.showPlaylistMenu(item) })
+                                else -> null
                             }
                         )
                     }

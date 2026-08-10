@@ -25,12 +25,24 @@ enum class LibraryTab(val label: String) {
     }
 }
 
+/** Ordering offered in the library, mapped to Jellyfin sort keys. */
+enum class LibrarySort(val label: String, val key: String, val order: String) {
+    RECENT_ACTIVITY("Recent activity", "DatePlayed,SortName", "Descending"),
+    RECENTLY_ADDED("Recently added", "DateCreated", "Descending"),
+    A_TO_Z("A–Z", "SortName", "Ascending");
+
+    companion object {
+        fun fromLabel(label: String) = entries.firstOrNull { it.label == label } ?: A_TO_Z
+    }
+}
+
 data class LibraryUiState(
     val tab: LibraryTab = LibraryTab.PLAYLISTS,
     val items: List<BaseItem> = emptyList(),
     val isLoading: Boolean = false,
     val error: String? = null,
-    val isGrid: Boolean = true
+    val isGrid: Boolean = true,
+    val sort: LibrarySort = LibrarySort.A_TO_Z
 )
 
 @androidx.media3.common.util.UnstableApi
@@ -47,14 +59,16 @@ class LibraryViewModel @Inject constructor(
     private val _state = MutableStateFlow(LibraryUiState(tab = LibraryTab.PLAYLISTS))
     val state: StateFlow<LibraryUiState> = _state
 
-    private val cache = mutableMapOf<LibraryTab, List<BaseItem>>()
+    // Keyed by tab and sort, since changing the order means a different query.
+    private val cache = mutableMapOf<Pair<LibraryTab, LibrarySort>, List<BaseItem>>()
 
     init {
         // Creating, deleting or editing a playlist anywhere invalidates the
         // Playlists tab, so it is reloaded rather than left stale.
         viewModelScope.launch {
             actions.playlistRevision.drop(1).collect {
-                cache.remove(LibraryTab.PLAYLISTS)
+                cache.keys.filter { key -> key.first == LibraryTab.PLAYLISTS }
+                    .forEach(cache::remove)
                 if (_state.value.tab == LibraryTab.PLAYLISTS) select(LibraryTab.PLAYLISTS)
             }
         }
@@ -64,14 +78,24 @@ class LibraryViewModel @Inject constructor(
         if (cache.isEmpty()) select(_state.value.tab)
     }
 
+    /** Playlists get their own menu, since only they can be renamed or re-covered. */
+    fun showPlaylistMenu(item: BaseItem) = actions.showPlaylistMenu(item)
+
     fun showMenu(item: com.jellyfinmusic.network.BaseItem) = actions.showTrackMenu(item)
 
     fun toggleFavorite(item: com.jellyfinmusic.network.BaseItem) = actions.toggleFavorite(item)
 
     fun newPlaylist() = actions.showCreatePlaylist(null)
 
+    fun setSort(sort: LibrarySort) {
+        if (sort == _state.value.sort) return
+        _state.value = _state.value.copy(sort = sort)
+        select(_state.value.tab)
+    }
+
     fun select(tab: LibraryTab) {
-        cache[tab]?.let {
+        val sort = _state.value.sort
+        cache[tab to sort]?.let {
             _state.value = _state.value.copy(tab = tab, items = it, isLoading = false, error = null)
             return
         }
@@ -85,14 +109,15 @@ class LibraryViewModel @Inject constructor(
                         downloads.refresh()
                         downloads.downloadedTracks.value.map { it.toBaseItem() }
                     }
-                    LibraryTab.PLAYLISTS -> repo.playlists()
-                    LibraryTab.ALBUMS -> repo.allAlbums()
+                    LibraryTab.PLAYLISTS -> repo.playlists(sort.key, sort.order)
+                    LibraryTab.ALBUMS -> repo.allAlbums(sortBy = sort.key, sortOrder = sort.order)
+                    // Artists carry no played or added date of their own.
                     LibraryTab.ARTISTS -> repo.artists()
-                    LibraryTab.SONGS -> repo.allSongs()
+                    LibraryTab.SONGS -> repo.allSongs(sortBy = sort.key, sortOrder = sort.order)
                 }
             }
                 .onSuccess {
-                    cache[tab] = it
+                    cache[tab to sort] = it
                     if (_state.value.tab == tab) {
                         _state.value = _state.value.copy(items = it, isLoading = false)
                     }

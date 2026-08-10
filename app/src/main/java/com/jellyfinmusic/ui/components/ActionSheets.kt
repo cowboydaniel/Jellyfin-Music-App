@@ -26,6 +26,8 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Downloading
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Share
@@ -149,8 +151,31 @@ fun ActionSheetHost(
                 )
             }
 
-            is ActionSheet.CreatePlaylist -> CreatePlaylistSheet(
-                onCreate = { viewModel.actions.createPlaylist(it, current.seedItem) },
+            is ActionSheet.CreatePlaylist -> NameEntrySheet(
+                heading = "New playlist",
+                initial = "",
+                confirmLabel = "Create",
+                onConfirm = { viewModel.actions.createPlaylist(it, current.seedItem) },
+                onCancel = viewModel.actions::dismissSheet
+            )
+
+            is ActionSheet.PlaylistMenu -> PlaylistMenuSheet(
+                playlist = current.playlist,
+                artworkUrl = viewModel.imageUrl(current.playlist),
+                onRename = { viewModel.actions.showRenamePlaylist(current.playlist) },
+                onChangeCover = { viewModel.actions.requestCoverArt(current.playlist) },
+                onShare = { viewModel.actions.shareItem(current.playlist) },
+                onDelete = {
+                    viewModel.actions.deletePlaylist(current.playlist.id) {}
+                    viewModel.actions.dismissSheet()
+                }
+            )
+
+            is ActionSheet.RenamePlaylist -> NameEntrySheet(
+                heading = "Rename playlist",
+                initial = current.playlist.name.orEmpty(),
+                confirmLabel = "Rename",
+                onConfirm = { viewModel.actions.renamePlaylist(current.playlist, it) },
                 onCancel = viewModel.actions::dismissSheet
             )
 
@@ -335,23 +360,26 @@ private fun AddToPlaylistSheet(
 }
 
 @Composable
-private fun CreatePlaylistSheet(
-    onCreate: (String) -> Unit,
+private fun NameEntrySheet(
+    heading: String,
+    initial: String,
+    confirmLabel: String,
+    onConfirm: (String) -> Unit,
     onCancel: () -> Unit
 ) {
-    var name by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf(initial) }
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focusRequester.requestFocus() } }
 
     Column(Modifier.padding(16.dp)) {
-        Text("New playlist", style = MaterialTheme.typography.titleMedium)
+        Text(heading, style = MaterialTheme.typography.titleMedium)
         TextField(
             value = name,
             onValueChange = { name = it },
             placeholder = { Text("Playlist name", color = AppColors.Secondary) },
             singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { onCreate(name) }),
+            keyboardActions = KeyboardActions(onDone = { onConfirm(name) }),
             colors = TextFieldDefaults.colors(
                 focusedContainerColor = AppColors.SurfaceVariant,
                 unfocusedContainerColor = AppColors.SurfaceVariant,
@@ -376,7 +404,7 @@ private fun CreatePlaylistSheet(
                     .padding(12.dp)
             )
             Button(
-                onClick = { onCreate(name) },
+                onClick = { onConfirm(name) },
                 enabled = name.isNotBlank(),
                 shape = RoundedCornerShape(50),
                 colors = ButtonDefaults.buttonColors(
@@ -384,7 +412,7 @@ private fun CreatePlaylistSheet(
                     contentColor = AppColors.Background
                 )
             ) {
-                Text("Create")
+                Text(confirmLabel)
             }
         }
     }
@@ -445,5 +473,44 @@ private fun QuickTile(
             maxLines = 1,
             modifier = Modifier.padding(top = 6.dp)
         )
+    }
+}
+
+/** Actions on a playlist itself, rather than a track inside it. */
+@Composable
+private fun PlaylistMenuSheet(
+    playlist: BaseItem,
+    artworkUrl: String?,
+    onRename: () -> Unit,
+    onChangeCover: () -> Unit,
+    onShare: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Column(Modifier.padding(bottom = 24.dp)) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Artwork(artworkUrl, Modifier.size(48.dp), shape = RoundedCornerShape(4.dp))
+            Column(
+                Modifier
+                    .weight(1f)
+                    .padding(start = 12.dp)
+            ) {
+                Text(playlist.name.orEmpty(), maxLines = 2, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    playlist.childCount?.let { "$it tracks" } ?: "Playlist",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AppColors.Secondary
+                )
+            }
+        }
+        HorizontalDivider(color = AppColors.SurfaceVariant)
+        SheetAction(Icons.Filled.Edit, "Rename", onClick = onRename)
+        SheetAction(Icons.Filled.Image, "Change cover", onClick = onChangeCover)
+        SheetAction(Icons.Filled.Share, "Share", onClick = onShare)
+        SheetAction(Icons.Filled.Delete, "Delete playlist", onClick = onDelete)
     }
 }

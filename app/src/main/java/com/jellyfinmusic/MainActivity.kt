@@ -79,6 +79,7 @@ import com.jellyfinmusic.ui.screens.AlbumDetailScreen
 import com.jellyfinmusic.ui.screens.ArtistDetailScreen
 import com.jellyfinmusic.ui.screens.DownloadsSettingsScreen
 import com.jellyfinmusic.ui.screens.ExploreScreen
+import com.jellyfinmusic.ui.screens.HistoryScreen
 import com.jellyfinmusic.ui.screens.HomeScreen
 import com.jellyfinmusic.ui.screens.LibraryScreen
 import com.jellyfinmusic.ui.screens.LikedSongsScreen
@@ -93,6 +94,7 @@ import java.net.URLDecoder
 import java.net.URLEncoder
 import javax.inject.Inject
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -152,6 +154,7 @@ private object Routes {
     const val ARTIST = "artist/{id}/{name}"
     const val LIKED = "liked"
     const val DOWNLOADS_SETTINGS = "downloads_settings"
+    const val HISTORY = "history"
 
     fun album(id: String, title: String, isPlaylist: Boolean) =
         "album/$id/${title.encode()}/$isPlaylist"
@@ -204,6 +207,38 @@ private fun AppRoot(startLoggedIn: Boolean, player: PlayerConnection) {
             }
             context.startActivity(
                 android.content.Intent.createChooser(intent, "Share ${payload.title}")
+            )
+        }
+    }
+
+    // Photo picker for playlist covers. The URI comes back asynchronously, so
+    // the playlist it belongs to is held while the sheet is gone.
+    var coverTargetId by remember { mutableStateOf<String?>(null) }
+    val pickCover = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        val target = coverTargetId
+        coverTargetId = null
+        if (uri != null && target != null) {
+            scope.launch {
+                val bytes = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    runCatching {
+                        context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    }.getOrNull()
+                }
+                if (bytes != null) actionsViewModel.actions.setCoverArt(target, bytes)
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        actionsViewModel.actions.pickImageFor.collect { playlist ->
+            coverTargetId = playlist.id
+            pickCover.launch(
+                androidx.activity.result.PickVisualMediaRequest(
+                    androidx.activity.result.contract.ActivityResultContracts
+                        .PickVisualMedia.ImageOnly
+                )
             )
         }
     }
@@ -415,7 +450,8 @@ private fun NavGraph(
                 onAlbumClick = openAlbum,
                 onArtistClick = openArtist,
                 onPlaylistClick = openAlbum,
-                onLikedSongsClick = { navController.navigate(Routes.LIKED) }
+                onLikedSongsClick = { navController.navigate(Routes.LIKED) },
+                onHistoryClick = { navController.navigate(Routes.HISTORY) }
             )
         }
 
@@ -439,6 +475,10 @@ private fun NavGraph(
 
         composable(Routes.LIKED) {
             LikedSongsScreen(contentPadding = contentPadding)
+        }
+
+        composable(Routes.HISTORY) {
+            HistoryScreen(contentPadding = contentPadding)
         }
 
         composable(Routes.DOWNLOADS_SETTINGS) {
@@ -518,5 +558,6 @@ private fun titleFor(route: String?, args: android.os.Bundle?): String = when (r
     Routes.ARTIST -> args?.getString("name").decode().ifBlank { "Artist" }
     Routes.LIKED -> "Liked songs"
     Routes.DOWNLOADS_SETTINGS -> "Downloads and storage"
+    Routes.HISTORY -> "History"
     else -> "Jellyfin Music"
 }

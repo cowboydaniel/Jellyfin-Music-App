@@ -124,6 +124,8 @@ fun AlbumDetailScreen(
                     onShuffle = { viewModel.playAll(shuffle = true) },
                     onRadio = viewModel::startRadio,
                     onDownload = viewModel::downloadAll,
+                    isFavorite = header != null && header.id in favorites,
+                    onToggleFavorite = { header?.let(viewModel::toggleFavorite) },
                     onDelete = if (isPlaylist) ({ confirmDelete = true }) else null
                 )
             }
@@ -182,6 +184,8 @@ fun ArtistDetailScreen(
                     name = state.header?.name ?: fallbackName,
                     artworkUrl = state.header?.let { viewModel.imageUrl(it) },
                     albumCount = state.albums.size,
+                    isFavorite = state.header != null && state.header!!.id in favorites,
+                    onToggleFavorite = { state.header?.let(viewModel::toggleFavorite) },
                     onShuffle = { viewModel.playAll(shuffle = true) },
                     onRadio = viewModel::startRadio
                 )
@@ -240,6 +244,8 @@ private fun DetailHeader(
     onShuffle: () -> Unit,
     onRadio: () -> Unit,
     onDownload: () -> Unit,
+    isFavorite: Boolean,
+    onToggleFavorite: () -> Unit,
     onDelete: (() -> Unit)? = null,
     mosaicUrls: List<String> = emptyList()
 ) {
@@ -302,8 +308,13 @@ private fun DetailHeader(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            RoundAction(
+                if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                if (isFavorite) "Remove from library" else "Save to library",
+                onToggleFavorite,
+                tint = if (isFavorite) AppColors.Accent else AppColors.OnBackground
+            )
             RoundAction(Icons.Filled.Shuffle, "Shuffle", onShuffle)
-            RoundAction(Icons.Filled.Radio, "Radio", onRadio)
             Box(
                 Modifier
                     .size(64.dp)
@@ -330,6 +341,8 @@ private fun ArtistHeader(
     name: String,
     artworkUrl: String?,
     albumCount: Int,
+    isFavorite: Boolean,
+    onToggleFavorite: () -> Unit,
     onShuffle: () -> Unit,
     onRadio: () -> Unit
 ) {
@@ -384,6 +397,12 @@ private fun ArtistHeader(
                     Icon(Icons.Filled.Radio, contentDescription = null, Modifier.size(18.dp))
                     Text("Radio", Modifier.padding(start = 6.dp))
                 }
+                RoundAction(
+                    if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                    if (isFavorite) "Remove from library" else "Save to library",
+                    onToggleFavorite,
+                    tint = if (isFavorite) AppColors.Accent else AppColors.OnBackground
+                )
             }
         }
     }
@@ -391,7 +410,12 @@ private fun ArtistHeader(
 
 /** Circular secondary action used around the header's play button. */
 @Composable
-private fun RoundAction(icon: ImageVector, description: String, onClick: () -> Unit) {
+private fun RoundAction(
+    icon: ImageVector,
+    description: String,
+    onClick: () -> Unit,
+    tint: Color = AppColors.OnBackground
+) {
     Box(
         Modifier
             .size(44.dp)
@@ -403,7 +427,7 @@ private fun RoundAction(icon: ImageVector, description: String, onClick: () -> U
         Icon(
             icon,
             contentDescription = description,
-            tint = AppColors.OnBackground,
+            tint = tint,
             modifier = Modifier.size(20.dp)
         )
     }

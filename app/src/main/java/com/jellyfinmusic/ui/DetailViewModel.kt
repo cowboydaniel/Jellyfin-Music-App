@@ -77,6 +77,13 @@ class DetailViewModel @Inject constructor(
         }
     }
 
+    /** Everything played recently, newest first. */
+    fun loadHistory() {
+        currentPlaylistId = null
+        reloadCurrent = { loadHistory() }
+        load { DetailUiState(tracks = repo.recentlyPlayedSongs(100), isLoading = false) }
+    }
+
     /** The Liked songs view: every track the user has favourited. */
     fun loadLikedSongs() {
         currentPlaylistId = null

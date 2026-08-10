@@ -131,3 +131,8 @@ data class DisplayPreferences(
     @SerialName("Client") val client: String = "",
     @SerialName("CustomPrefs") val customPrefs: Map<String, String> = emptyMap()
 )
+
+@Serializable
+data class UpdatePlaylistRequest(
+    @SerialName("Name") val name: String
+)
