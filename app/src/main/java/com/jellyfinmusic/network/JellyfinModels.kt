@@ -139,3 +139,16 @@ data class DisplayPreferences(
 data class UpdatePlaylistRequest(
     @SerialName("Name") val name: String
 )
+
+@Serializable
+data class JellyfinSession(
+    @SerialName("Id") val id: String = "",
+    @SerialName("DeviceName") val deviceName: String = "",
+    @SerialName("Client") val client: String = "",
+    @SerialName("UserName") val userName: String = "",
+    @SerialName("DeviceId") val deviceId: String = "",
+    @SerialName("SupportsRemoteControl") val supportsRemoteControl: Boolean = false,
+    @SerialName("NowPlayingItem") val nowPlayingItem: BaseItem? = null
+) {
+    val label: String get() = deviceName.ifBlank { client }.ifBlank { "Unknown device" }
+}

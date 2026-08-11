@@ -78,5 +78,8 @@ dependencies {
     implementation("io.coil-kt:coil-compose:2.6.0")
     implementation("androidx.palette:palette-ktx:1.0.0")
 
+    implementation("androidx.glance:glance-appwidget:1.1.0")
+    implementation("androidx.glance:glance-material3:1.1.0")
+
     testImplementation("junit:junit:4.13.2")
 }

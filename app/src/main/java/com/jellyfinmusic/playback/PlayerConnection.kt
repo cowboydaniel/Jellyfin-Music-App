@@ -142,11 +142,19 @@ class PlayerConnection @Inject constructor(
         _sleepTimerEndsAt.value = null
     }
 
-    /** Pauses playback after [minutes]; passing 0 cancels a running timer. */
+    /** Media ID at a queue position, for handing the queue to another device. */
+    fun mediaIdAt(index: Int): String? =
+        controller?.takeIf { index in 0 until it.mediaItemCount }?.getMediaItemAt(index)?.mediaId
+
+    fun pause() {
+        controller?.pause()
+    }
+
     fun setPlaybackSpeed(speed: Float) {
         controller?.setPlaybackSpeed(speed)
     }
 
+    /** Pauses playback after [minutes]; passing 0 cancels a running timer. */
     fun setSleepTimer(minutes: Int) {
         handler.removeCallbacks(sleepRunnable)
         if (minutes <= 0) {

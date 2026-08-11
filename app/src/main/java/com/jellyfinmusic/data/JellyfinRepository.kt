@@ -368,6 +368,29 @@ class JellyfinRepository @Inject constructor(
         }
     }
 
+    // ---- Remote control ---------------------------------------------------
+
+    /**
+     * Other clients this user can drive. The app's own session is filtered out,
+     * since sending playback to the device you are holding is not casting.
+     */
+    suspend fun remoteSessions(): List<com.jellyfinmusic.network.JellyfinSession> =
+        apis.jellyfin().getSessions(userId())
+            .filter { it.supportsRemoteControl && it.deviceId != "jellyfin-music-android" }
+
+    suspend fun playOnSession(sessionId: String, itemIds: List<String>, startIndex: Int = 0) {
+        if (itemIds.isEmpty()) return
+        apis.jellyfin().playOnSession(
+            sessionId = sessionId,
+            itemIds = itemIds.joinToString(","),
+            startIndex = startIndex
+        )
+    }
+
+    suspend fun sessionCommand(sessionId: String, command: String) {
+        apis.jellyfin().sessionPlaystate(sessionId, command)
+    }
+
     /** A link other Jellyfin clients and the web UI can open. */
     fun shareUrl(itemId: String): String =
         "${settings.current.jellyfinUrl}web/index.html#!/details?id=$itemId"

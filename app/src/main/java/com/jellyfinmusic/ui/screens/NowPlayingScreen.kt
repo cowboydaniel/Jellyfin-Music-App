@@ -35,6 +35,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.Bedtime
+import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Favorite
@@ -120,8 +121,12 @@ fun NowPlayingScreen(
     onGoToArtist: () -> Unit = {},
     onRelatedRequested: () -> Unit = {},
     onPlayRelated: (com.jellyfinmusic.network.BaseItem) -> Unit = {},
-    artworkFor: (com.jellyfinmusic.network.BaseItem) -> String? = { null }
+    artworkFor: (com.jellyfinmusic.network.BaseItem) -> String? = { null },
+    remote: com.jellyfinmusic.ui.RemoteState = com.jellyfinmusic.ui.RemoteState(),
+    onLoadRemotes: () -> Unit = {},
+    onPlayOnRemote: (com.jellyfinmusic.network.JellyfinSession) -> Unit = {}
 ) {
+    var showRemotes by remember { mutableStateOf(false) }
     var showSleepTimer by remember { mutableStateOf(false) }
     var tab by remember { mutableStateOf(PlayerTab.UP_NEXT) }
     var panelOpen by remember { mutableStateOf(false) }
@@ -137,6 +142,17 @@ fun NowPlayingScreen(
     LaunchedEffect(panelOpen, tab, state.currentItemId) {
         if (panelOpen && tab == PlayerTab.LYRICS) onLyricsRequested()
         if (panelOpen && tab == PlayerTab.RELATED) onRelatedRequested()
+    }
+
+    if (showRemotes) {
+        RemoteDevicesDialog(
+            remote = remote,
+            onSelect = {
+                onPlayOnRemote(it)
+                showRemotes = false
+            },
+            onDismiss = { showRemotes = false }
+        )
     }
 
     if (showSleepTimer) {
@@ -195,6 +211,14 @@ fun NowPlayingScreen(
                         modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE)
                     )
                 }
+                CircleIcon(
+                    Icons.Filled.Cast,
+                    "Play on another device",
+                    onClick = {
+                        onLoadRemotes()
+                        showRemotes = true
+                    }
+                )
                 CircleIcon(Icons.Filled.MoreVert, "More", onClick = onShowMenu)
             }
 
@@ -806,5 +830,67 @@ private fun SleepTimerDialog(
             }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+/**
+ * The self-hosted answer to casting: hand the queue to another Jellyfin client
+ * signed in to the same server.
+ */
+@Composable
+private fun RemoteDevicesDialog(
+    remote: com.jellyfinmusic.ui.RemoteState,
+    onSelect: (com.jellyfinmusic.network.JellyfinSession) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = AppColors.Surface,
+        title = { Text("Play on another device") },
+        text = {
+            Column {
+                when {
+                    remote.isLoading -> Text(
+                        "Looking for devices…",
+                        color = AppColors.Secondary,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+
+                    remote.error != null -> Text(
+                        remote.error,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+
+                    remote.sessions.isEmpty() -> Text(
+                        "No other Jellyfin clients are signed in right now. Open Jellyfin on " +
+                            "a desktop, TV or browser and it will appear here.",
+                        color = AppColors.Secondary,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+
+                    else -> remote.sessions.forEach { session ->
+                        Column(
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable { onSelect(session) }
+                                .padding(vertical = 10.dp)
+                        ) {
+                            Text(session.label, style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                listOfNotNull(
+                                    session.client.takeIf { it.isNotBlank() },
+                                    session.nowPlayingItem?.name?.let { "playing $it" }
+                                ).joinToString(" · "),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = AppColors.Secondary
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } }
     )
 }

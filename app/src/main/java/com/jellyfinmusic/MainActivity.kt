@@ -186,6 +186,7 @@ private fun AppRoot(startLoggedIn: Boolean, player: PlayerConnection) {
     val sleepTimerEndsAt by playerViewModel.sleepTimerEndsAt.collectAsStateWithLifecycle()
     val relatedState by playerViewModel.related.collectAsStateWithLifecycle()
     val dislikedIds by playerViewModel.dislikedIds.collectAsStateWithLifecycle()
+    val remoteState by playerViewModel.remote.collectAsStateWithLifecycle()
 
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
@@ -377,6 +378,9 @@ private fun AppRoot(startLoggedIn: Boolean, player: PlayerConnection) {
                 onRelatedRequested = { playerViewModel.loadRelated(playerState.currentItemId) },
                 onPlayRelated = playerViewModel::playRelated,
                 artworkFor = playerViewModel::artworkFor,
+                remote = remoteState,
+                onLoadRemotes = playerViewModel::loadRemoteSessions,
+                onPlayOnRemote = playerViewModel::playOnRemote,
                 sleepTimerEndsAt = sleepTimerEndsAt,
                 onSetSleepTimer = playerViewModel::setSleepTimer
             )

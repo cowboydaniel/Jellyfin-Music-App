@@ -91,6 +91,7 @@ class MusicService : MediaLibraryService() {
                 saveState()
             }
             reportPlaybackChange(player, events)
+            publishToWidget(player)
             if (events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION)) {
                 applyTrackVolume(player)
             }
@@ -163,6 +164,7 @@ class MusicService : MediaLibraryService() {
             .build()
 
         restoreState(player)
+        publishToWidget(player)
         player.setPlaybackSpeed(settings.current.playbackSpeed)
         applyTrackVolume(player)
         player.addListener(listener)
@@ -425,6 +427,21 @@ class MusicService : MediaLibraryService() {
         )
         player.playWhenReady = false
         player.prepare()
+    }
+
+    /** Keeps the home screen widget in step with what is actually playing. */
+    private fun publishToWidget(player: Player) {
+        val metadata = player.mediaMetadata
+        serviceScope.launch {
+            runCatching {
+                com.jellyfinmusic.widget.NowPlayingWidget.publish(
+                    context = applicationContext,
+                    title = metadata.title?.toString().orEmpty(),
+                    artist = metadata.artist?.toString().orEmpty(),
+                    isPlaying = player.isPlaying
+                )
+            }
+        }
     }
 
     private fun saveState() {

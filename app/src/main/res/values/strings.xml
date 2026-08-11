@@ -2,4 +2,5 @@
 <resources>
     <string name="app_name">Jellyfin Music</string>
     <string name="download_channel_name">Downloads</string>
+    <string name="widget_description">Playback controls for Jellyfin Music</string>
 </resources>

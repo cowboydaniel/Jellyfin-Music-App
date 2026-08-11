@@ -103,6 +103,29 @@ interface JellyfinApi {
     )
 
     /**
+     * Other clients signed in to this server. Jellyfin can drive playback on
+     * any of them remotely, which is the self-hosted equivalent of casting.
+     */
+    @GET("Sessions")
+    suspend fun getSessions(
+        @Query("controllableByUserId") controllableByUserId: String
+    ): List<JellyfinSession>
+
+    @POST("Sessions/{sessionId}/Playing")
+    suspend fun playOnSession(
+        @Path("sessionId") sessionId: String,
+        @Query("itemIds") itemIds: String,
+        @Query("playCommand") playCommand: String = "PlayNow",
+        @Query("startIndex") startIndex: Int? = null
+    )
+
+    @POST("Sessions/{sessionId}/Playing/{command}")
+    suspend fun sessionPlaystate(
+        @Path("sessionId") sessionId: String,
+        @Path("command") command: String
+    )
+
+    /**
      * Thumbs rating, which Jellyfin stores separately from favourites: a
      * favourite is "save this", a rating is "more or less like this".
      */

@@ -24,6 +24,13 @@ data class RelatedState(
     val isEmpty: Boolean get() = moreFromArtist.isEmpty() && moreFromAlbum.isEmpty()
 }
 
+/** Other Jellyfin clients this user can send playback to. */
+data class RemoteState(
+    val sessions: List<com.jellyfinmusic.network.JellyfinSession> = emptyList(),
+    val isLoading: Boolean = false,
+    val error: String? = null
+)
+
 data class LyricsState(
     val itemId: String? = null,
     val lines: List<LyricLine> = emptyList(),
@@ -49,6 +56,45 @@ class PlayerViewModel @Inject constructor(
 
     val sleepTimerEndsAt = player.sleepTimerEndsAt
     val dislikedIds = actions.dislikedIds
+
+    private val _remote = MutableStateFlow(RemoteState())
+    val remote: StateFlow<RemoteState> = _remote
+
+    /** Lists other clients signed in to the server that accept remote control. */
+    fun loadRemoteSessions() {
+        _remote.value = RemoteState(isLoading = true)
+        viewModelScope.launch {
+            runCatching { repo.remoteSessions() }
+                .onSuccess { _remote.value = RemoteState(sessions = it) }
+                .onFailure {
+                    _remote.value = RemoteState(
+                        error = it.message ?: "Could not reach the server"
+                    )
+                }
+        }
+    }
+
+    /**
+     * Hands the current queue to another device and stops playing here, which
+     * is what "cast" means in practice.
+     */
+    fun playOnRemote(session: com.jellyfinmusic.network.JellyfinSession) {
+        val state = player.state.value
+        val ids = state.queue.indices.mapNotNull { index ->
+            player.mediaIdAt(index)
+        }
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            runCatching {
+                repo.playOnSession(session.id, ids, state.currentIndex.coerceAtLeast(0))
+            }
+                .onSuccess {
+                    player.pause()
+                    actions.notify("Playing on ${session.label}")
+                }
+                .onFailure { actions.notify(it.message ?: "Could not reach that device") }
+        }
+    }
 
     private val _related = MutableStateFlow(RelatedState())
     val related: StateFlow<RelatedState> = _related
