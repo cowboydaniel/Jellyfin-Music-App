@@ -12,6 +12,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -73,6 +74,13 @@ class HomeViewModel @Inject constructor(
     val state: StateFlow<HomeUiState> = _state
 
     private var loaded = false
+
+    init {
+        // Home shows playlists too, so it reloads when the set changes.
+        viewModelScope.launch {
+            actions.playlistRevision.drop(1).collect { refresh() }
+        }
+    }
 
     fun loadOnce() {
         if (loaded) return

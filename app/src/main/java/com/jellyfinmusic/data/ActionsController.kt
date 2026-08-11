@@ -222,6 +222,16 @@ class ActionsController @Inject constructor(
         _sheet.value = ActionSheet.None
     }
 
+    /**
+     * Announces that the playlist set changed. Anything that writes playlists
+     * without going through this controller — the importer, for one — has to
+     * say so, or open screens keep serving their cached list.
+     */
+    fun playlistsChanged() {
+        _playlistRevision.value++
+        refreshPlaylists()
+    }
+
     fun refreshPlaylists() {
         scope.launch {
             runCatching { repo.playlists() }.onSuccess { _playlists.value = it }

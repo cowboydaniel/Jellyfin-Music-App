@@ -44,7 +44,8 @@ data class ImportUiState(
 class ImportViewModel @Inject constructor(
     private val importer: PlaylistImporter,
     private val lidarr: LidarrRepository,
-    private val settings: SettingsStore
+    private val settings: SettingsStore,
+    private val actions: com.jellyfinmusic.data.ActionsController
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ImportUiState())
@@ -114,6 +115,9 @@ class ImportViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching { importer.createPlaylist(name, _state.value.matched) }
                 .onSuccess { count ->
+                    // Tells the library and Home to reload, so the new playlist
+                    // appears without restarting the app.
+                    actions.playlistsChanged()
                     _state.value = _state.value.copy(
                         isWorking = false,
                         finished = true,
