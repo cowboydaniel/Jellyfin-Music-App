@@ -2,7 +2,9 @@ package com.jellyfinmusic.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,8 +22,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Person
@@ -196,6 +200,7 @@ fun ArtistCard(
 }
 
 /** Dense track row with small artwork and an overflow button. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TrackRow(
     title: String,
@@ -209,15 +214,30 @@ fun TrackRow(
     isArtist: Boolean = false,
     artShape: Shape = RoundedCornerShape(4.dp),
     isFavorite: Boolean = false,
-    onFavoriteClick: (() -> Unit)? = null
+    onFavoriteClick: (() -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null,
+    /** Null outside selection mode; the checkbox only appears once it starts. */
+    isSelected: Boolean? = null
 ) {
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .background(
+                if (isSelected == true) AppColors.SurfaceVariant
+                else androidx.compose.ui.graphics.Color.Transparent
+            )
             .padding(horizontal = 16.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        if (isSelected != null) {
+            Icon(
+                if (isSelected) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
+                contentDescription = if (isSelected) "Selected" else "Not selected",
+                tint = if (isSelected) AppColors.Accent else AppColors.Secondary,
+                modifier = Modifier.padding(end = 12.dp)
+            )
+        }
         Artwork(artworkUrl, Modifier.size(artSize.dp), shape = artShape, isArtist = isArtist)
         Column(
             Modifier

@@ -22,6 +22,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.FileDownload
@@ -71,6 +73,40 @@ fun LibraryScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val favorites by viewModel.favoriteIds.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { viewModel.loadOnce() }
+    var confirmDeleteSelected by androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableStateOf(false)
+    }
+
+    // Backing out should leave selection mode rather than the screen.
+    androidx.activity.compose.BackHandler(enabled = state.inSelectionMode) {
+        viewModel.clearSelection()
+    }
+
+    if (confirmDeleteSelected) {
+        val count = state.selected.orEmpty().size
+        val what = if (state.tab == LibraryTab.PLAYLISTS) {
+            "Delete $count playlist${if (count == 1) "" else "s"}? This cannot be undone."
+        } else {
+            "Remove $count download${if (count == 1) "" else "s"} from this device?"
+        }
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirmDeleteSelected = false },
+            title = { Text(if (state.tab == LibraryTab.PLAYLISTS) "Delete playlists" else "Remove downloads") },
+            text = { Text(what) },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    confirmDeleteSelected = false
+                    viewModel.deleteSelected()
+                }) { Text(if (state.tab == LibraryTab.PLAYLISTS) "Delete" else "Remove") }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { confirmDeleteSelected = false }) {
+                    Text("Cancel")
+                }
+            },
+            containerColor = AppColors.Surface
+        )
+    }
 
     Box(Modifier.fillMaxSize()) {
     Column(
@@ -78,6 +114,15 @@ fun LibraryScreen(
             .fillMaxSize()
             .padding(top = contentPadding.calculateTopPadding())
     ) {
+        if (state.inSelectionMode) {
+            SelectionBar(
+                count = state.selected.orEmpty().size,
+                total = state.items.size,
+                onSelectAll = viewModel::selectAll,
+                onClear = viewModel::clearSelection,
+                onDelete = { confirmDeleteSelected = true }
+            )
+        } else
         Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             PillRow(
                 options = LibraryTab.entries.map { it.label },
@@ -180,14 +225,24 @@ fun LibraryScreen(
                             subtitle = subtitleFor(item, state.tab),
                             artworkUrl = viewModel.imageUrl(item),
                             onClick = {
-                                onItemClick(
-                                    item,
-                                    state.tab,
-                                    onAlbumClick,
-                                    onArtistClick,
-                                    onPlaylistClick
-                                ) { viewModel.playSongs(index) }
+                                if (state.inSelectionMode) {
+                                    viewModel.toggleSelected(item)
+                                } else {
+                                    onItemClick(
+                                        item,
+                                        state.tab,
+                                        onAlbumClick,
+                                        onArtistClick,
+                                        onPlaylistClick
+                                    ) { viewModel.playSongs(index) }
+                                }
                             },
+                            onLongClick = if (state.canSelect) {
+                                { viewModel.startSelection(item) }
+                            } else {
+                                null
+                            },
+                            isSelected = state.selected?.contains(item.id),
                             isArtist = state.tab == LibraryTab.ARTISTS,
                             artShape = if (state.tab == LibraryTab.ARTISTS) CircleShape else androidx.compose.foundation.shape.RoundedCornerShape(4.dp),
                             isFavorite = item.id in favorites,
@@ -312,6 +367,43 @@ private inline fun onItemClick(
         LibraryTab.ALBUMS -> onAlbumClick(item)
         LibraryTab.ARTISTS -> onArtistClick(item)
         LibraryTab.SONGS -> onSongClick()
+    }
+}
+
+/** Replaces the tab pills while rows are selected. */
+@Composable
+private fun SelectionBar(
+    count: Int,
+    total: Int,
+    onSelectAll: () -> Unit,
+    onClear: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp, vertical = 4.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+    ) {
+        IconButton(onClick = onClear) {
+            Icon(Icons.Filled.Close, contentDescription = "Cancel selection", tint = AppColors.OnBackground)
+        }
+        Text(
+            "$count selected",
+            style = MaterialTheme.typography.titleMedium,
+            color = AppColors.OnBackground,
+            modifier = Modifier.weight(1f)
+        )
+        androidx.compose.material3.TextButton(onClick = onSelectAll) {
+            Text(if (count == total) "All selected" else "Select all", color = AppColors.Accent)
+        }
+        IconButton(onClick = onDelete, enabled = count > 0) {
+            Icon(
+                Icons.Filled.Delete,
+                contentDescription = "Delete selected",
+                tint = if (count > 0) AppColors.OnBackground else AppColors.Secondary
+            )
+        }
     }
 }
 

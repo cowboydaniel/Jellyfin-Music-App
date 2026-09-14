@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
@@ -76,6 +77,16 @@ fun AlbumDetailScreen(
     var confirmDelete by remember { mutableStateOf(false) }
     LaunchedEffect(albumId, isPlaylist) { viewModel.loadAlbum(albumId, isPlaylist) }
 
+    val downloadStates by viewModel.downloadStates.collectAsStateWithLifecycle()
+    // Only a download still in flight offers a stop; a finished one does not.
+    val downloadProgress = remember(downloadStates, state.tracks) {
+        val tracked = state.tracks.map { downloadStates[it.id] }
+        val running = tracked.count { it == com.jellyfinmusic.data.DownloadState.DOWNLOADING }
+        if (running == 0) null
+        else tracked.count { it == com.jellyfinmusic.data.DownloadState.DOWNLOADED } to
+            state.tracks.size
+    }
+
     if (confirmDelete) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
@@ -123,7 +134,9 @@ fun AlbumDetailScreen(
                     onPlay = { viewModel.playAll(shuffle = false) },
                     onShuffle = { viewModel.playAll(shuffle = true) },
                     onRadio = viewModel::startRadio,
+                    downloadProgress = downloadProgress,
                     onDownload = viewModel::downloadAll,
+                    onStopDownload = viewModel::stopDownload,
                     isFavorite = header != null && header.id in favorites,
                     onToggleFavorite = { header?.let(viewModel::toggleFavorite) },
                     onDelete = if (isPlaylist) ({ confirmDelete = true }) else null
@@ -243,7 +256,10 @@ private fun DetailHeader(
     onPlay: () -> Unit,
     onShuffle: () -> Unit,
     onRadio: () -> Unit,
+    /** Downloaded track count out of the total, or null when none is running. */
+    downloadProgress: Pair<Int, Int>?,
     onDownload: () -> Unit,
+    onStopDownload: () -> Unit,
     isFavorite: Boolean,
     onToggleFavorite: () -> Unit,
     onDelete: (() -> Unit)? = null,
@@ -330,7 +346,14 @@ private fun DetailHeader(
                     modifier = Modifier.size(34.dp)
                 )
             }
-            RoundAction(Icons.Filled.Download, "Download", onDownload)
+            // While tracks are still coming down the same button stops them,
+            // and says how far it has got.
+            if (downloadProgress != null) {
+                val (done, total) = downloadProgress
+                RoundAction(Icons.Filled.Close, "Stop download ($done/$total)", onStopDownload)
+            } else {
+                RoundAction(Icons.Filled.Download, "Download", onDownload)
+            }
             onDelete?.let { RoundAction(Icons.Filled.Delete, "Delete playlist", it) }
         }
     }

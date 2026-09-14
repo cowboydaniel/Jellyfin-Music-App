@@ -43,8 +43,20 @@ data class LibraryUiState(
     val isLoading: Boolean = false,
     val error: String? = null,
     val isGrid: Boolean = true,
-    val sort: LibrarySort = LibrarySort.A_TO_Z
-)
+    val sort: LibrarySort = LibrarySort.A_TO_Z,
+    /** Null when not selecting; a set (possibly empty) once selection starts. */
+    val selected: Set<String>? = null
+) {
+    val inSelectionMode: Boolean get() = selected != null
+
+    /**
+     * Only downloads and playlists can be deleted from here. Deleting an album,
+     * artist or song would delete the media from the server, which is not what
+     * anyone means by long-pressing a row in their library.
+     */
+    val canSelect: Boolean
+        get() = tab == LibraryTab.DOWNLOADS || tab == LibraryTab.PLAYLISTS
+}
 
 @androidx.media3.common.util.UnstableApi
 @HiltViewModel
@@ -111,6 +123,8 @@ class LibraryViewModel @Inject constructor(
 
     fun select(tab: LibraryTab) {
         val sort = _state.value.sort
+        // A selection belongs to the list it was made in.
+        if (tab != _state.value.tab) _state.value = _state.value.copy(selected = null)
         cache[tab to sort]?.takeIf { tab != LibraryTab.DOWNLOADS }?.let {
             _state.value = _state.value.copy(tab = tab, items = it, isLoading = false, error = null)
             return
@@ -194,6 +208,52 @@ class LibraryViewModel @Inject constructor(
         val inCollections = collections.flatMap { it.trackIds }.toSet()
         return collections.map { it.toBaseItem() } +
             tracks.filterNot { it.id in inCollections }.map { it.toBaseItem() }
+    }
+
+    // ---- Selection --------------------------------------------------------
+
+    /** Long-press starts selection with that row already ticked. */
+    fun startSelection(item: BaseItem) {
+        if (!_state.value.canSelect) return
+        _state.value = _state.value.copy(selected = setOf(item.id))
+    }
+
+    fun toggleSelected(item: BaseItem) {
+        val current = _state.value.selected ?: return
+        val updated = if (item.id in current) current - item.id else current + item.id
+        // Unticking the last row leaves selection mode, so there is always a
+        // way back out without hunting for the close button.
+        _state.value = _state.value.copy(selected = updated.ifEmpty { null })
+    }
+
+    fun selectAll() {
+        if (!_state.value.canSelect) return
+        _state.value = _state.value.copy(selected = _state.value.items.map { it.id }.toSet())
+    }
+
+    fun clearSelection() {
+        _state.value = _state.value.copy(selected = null)
+    }
+
+    /**
+     * Deletes everything ticked: downloads come off the device, playlists are
+     * deleted on the server. Selection ends either way.
+     */
+    fun deleteSelected() {
+        val ids = _state.value.selected.orEmpty()
+        if (ids.isEmpty()) return
+        val items = _state.value.items.filter { it.id in ids }
+        when (_state.value.tab) {
+            LibraryTab.DOWNLOADS -> items.forEach {
+                when (it.type) {
+                    "Playlist", "MusicAlbum" -> downloads.removeCollection(it.id)
+                    else -> downloads.remove(it.id)
+                }
+            }
+            LibraryTab.PLAYLISTS -> items.forEach { actions.deletePlaylist(it.id) {} }
+            else -> Unit
+        }
+        _state.value = _state.value.copy(selected = null)
     }
 
     fun imageUrl(item: BaseItem): String? = repo.artworkFor(item)

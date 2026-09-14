@@ -160,10 +160,25 @@ class DetailViewModel @Inject constructor(
 
     fun toggleFavorite(item: BaseItem) = actions.toggleFavorite(item)
 
+    /** Per-track download state, so the header button can show progress. */
+    val downloadStates = downloads.states
+
     fun downloadAll() {
         val header = _state.value.header
         val label = header?.name ?: "these tracks"
         actions.downloadAll(_state.value.tracks, label, header)
+    }
+
+    /**
+     * Stops a download in progress and clears whatever already landed. Queued
+     * tracks cannot be left behind: a half-downloaded collection that cannot be
+     * cancelled just keeps spending data.
+     */
+    fun stopDownload() {
+        val header = _state.value.header
+        _state.value.tracks.forEach { downloads.remove(it.id) }
+        header?.let { downloads.removeCollection(it.id) }
+        actions.notify("Download cancelled")
     }
 
     fun deleteCurrentPlaylist(onDeleted: () -> Unit) {
