@@ -18,6 +18,21 @@ android {
         versionName = "1.0"
     }
 
+    signingConfigs {
+        // Pinned to a keystore in the repo rather than the one Gradle generates
+        // in ~/.android. A generated key differs on every machine and every
+        // fresh build container, and Android refuses to update an installed
+        // package whose signature changed -- which forces an uninstall and
+        // throws away the signed-in session, the queue and every download.
+        // Standard debug credentials; this key cannot sign a release build.
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
