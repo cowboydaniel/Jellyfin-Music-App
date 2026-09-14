@@ -81,7 +81,7 @@ class LibraryViewModel @Inject constructor(
                 downloads.downloadedCollections,
                 downloads.downloadedTracks
             ) { collections, tracks ->
-                collections.map { it.toBaseItem() } + tracks.map { it.toBaseItem() }
+                downloadItems(collections, tracks)
             }.collect { items ->
                 if (_state.value.tab == LibraryTab.DOWNLOADS) {
                     _state.value = _state.value.copy(items = items, isLoading = false, error = null)
@@ -128,8 +128,10 @@ class LibraryViewModel @Inject constructor(
                     // result, here and again as later downloads land.
                     LibraryTab.DOWNLOADS -> {
                         downloads.refresh()
-                        downloads.downloadedCollections.value.map { it.toBaseItem() } +
-                            downloads.downloadedTracks.value.map { it.toBaseItem() }
+                        downloadItems(
+                            downloads.downloadedCollections.value,
+                            downloads.downloadedTracks.value
+                        )
                     }
                     LibraryTab.PLAYLISTS -> repo.playlists(sort.key, sort.order)
                     LibraryTab.ALBUMS -> repo.allAlbums(sortBy = sort.key, sortOrder = sort.order)
@@ -179,16 +181,35 @@ class LibraryViewModel @Inject constructor(
         player.playQueue(songs.toPlayable(repo), start)
     }
 
+    /**
+     * The Downloads tab: collections first, then only the tracks that were
+     * downloaded on their own. A track that came down as part of a playlist is
+     * reachable by opening that playlist, so listing it loose as well just
+     * buries the collections under their own contents.
+     */
+    private fun downloadItems(
+        collections: List<com.jellyfinmusic.data.DownloadedCollection>,
+        tracks: List<com.jellyfinmusic.data.SavedTrack>
+    ): List<BaseItem> {
+        val inCollections = collections.flatMap { it.trackIds }.toSet()
+        return collections.map { it.toBaseItem() } +
+            tracks.filterNot { it.id in inCollections }.map { it.toBaseItem() }
+    }
+
     fun imageUrl(item: BaseItem): String? = repo.artworkFor(item)
 
     /** Plays everything in the current tab in random order. */
     fun shuffleAll() {
         val items = _state.value.items
         if (items.isEmpty()) return
-        if (_state.value.tab == LibraryTab.SONGS || _state.value.tab == LibraryTab.DOWNLOADS) {
-            val songs = items.filter { it.type != "Playlist" && it.type != "MusicAlbum" }
+        if (_state.value.tab == LibraryTab.DOWNLOADS) {
+            // Everything on disk, including tracks inside collections -- those
+            // are hidden from the list, but "shuffle all" still means all.
+            val songs = downloads.downloadedTracks.value
             if (songs.isEmpty()) return
-            player.playQueue(songs.shuffled().toPlayable(repo), 0)
+            player.playQueue(songs.shuffled().map(downloads::toPlayable), 0)
+        } else if (_state.value.tab == LibraryTab.SONGS) {
+            player.playQueue(items.shuffled().toPlayable(repo), 0)
         }
     }
 
