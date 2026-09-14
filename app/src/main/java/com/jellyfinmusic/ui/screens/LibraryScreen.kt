@@ -278,7 +278,11 @@ fun LibraryScreen(
 }
 
 private fun subtitleFor(item: BaseItem, tab: LibraryTab): String = when (tab) {
-    LibraryTab.DOWNLOADS -> listOfNotNull(item.artistName, "Downloaded").joinToString(" · ")
+    LibraryTab.DOWNLOADS -> when (item.type) {
+        "Playlist" -> "Playlist · ${item.childCount ?: 0} tracks · Downloaded"
+        "MusicAlbum" -> "Album · ${item.childCount ?: 0} tracks · Downloaded"
+        else -> listOfNotNull(item.artistName, "Downloaded").joinToString(" · ")
+    }
     LibraryTab.PLAYLISTS -> item.childCount?.let { "Playlist · $it tracks" } ?: "Playlist"
     LibraryTab.ALBUMS -> listOfNotNull(item.artistName, item.productionYear?.toString()).joinToString(" · ")
     LibraryTab.ARTISTS -> "Artist"
@@ -297,7 +301,13 @@ private inline fun onItemClick(
     onSongClick: () -> Unit
 ) {
     when (tab) {
-        LibraryTab.DOWNLOADS -> onSongClick()
+        // Downloads mixes collections and loose tracks, so the row's own type
+        // decides where it goes rather than the tab.
+        LibraryTab.DOWNLOADS -> when (item.type) {
+            "Playlist" -> onPlaylistClick(item)
+            "MusicAlbum" -> onAlbumClick(item)
+            else -> onSongClick()
+        }
         LibraryTab.PLAYLISTS -> onPlaylistClick(item)
         LibraryTab.ALBUMS -> onAlbumClick(item)
         LibraryTab.ARTISTS -> onArtistClick(item)

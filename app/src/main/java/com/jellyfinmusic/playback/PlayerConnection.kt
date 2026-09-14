@@ -235,6 +235,12 @@ data class PlayableTrack(
     fun toMediaItem(): MediaItem = MediaItem.Builder()
         .setMediaId(id)
         .setUri(streamUrl)
+        // The cache is keyed by item ID rather than by URL. A download is
+        // fetched from the static endpoint while playback asks for whichever
+        // stream URL the current quality tier produces, and the two only match
+        // at Original quality -- so without this a downloaded track is a cache
+        // miss and will not play offline.
+        .setCustomCacheKey(id)
         .setMediaMetadata(
             MediaMetadata.Builder()
                 .setTitle(title)

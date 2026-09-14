@@ -37,8 +37,12 @@ class DownloadsController @Inject constructor(
     private val downloadManager: DownloadManager,
     private val cache: SimpleCache,
     private val repo: JellyfinRepository,
-    private val settings: SettingsStore
+    private val settings: SettingsStore,
+    private val collectionsStore: DownloadedCollectionsStore
 ) {
+    /** Playlists and albums downloaded as a unit, in their original order. */
+    val downloadedCollections: StateFlow<List<DownloadedCollection>> = collectionsStore.collections
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private val _states = MutableStateFlow<Map<String, DownloadState>>(emptyMap())
@@ -124,6 +128,10 @@ class DownloadsController @Inject constructor(
     fun download(item: BaseItem, smart: Boolean = false) {
         if (smart) smartDownloadIds.add(item.id)
         val request = DownloadRequest.Builder(item.id, android.net.Uri.parse(repo.downloadUrl(item.id)))
+            // Must match the key PlayableTrack puts on its MediaItem, or the
+            // player looks for the track under a different name than the one
+            // it was stored under and falls through to the network.
+            .setCustomCacheKey(item.id)
             .setData(
                 SavedTrack(
                     id = item.id,
@@ -142,7 +150,44 @@ class DownloadsController @Inject constructor(
         )
     }
 
-    fun downloadAll(items: List<BaseItem>) = items.forEach(::download)
+    /**
+     * Downloads a playlist or album and remembers it as a collection, so it can
+     * still be opened and played in order with no connection. [header] is the
+     * playlist or album itself; without it the tracks are downloaded loose.
+     */
+    fun downloadAll(items: List<BaseItem>, header: BaseItem? = null) {
+        items.forEach(::download)
+        if (header != null && items.isNotEmpty()) {
+            collectionsStore.put(
+                DownloadedCollection(
+                    id = header.id,
+                    name = header.name.orEmpty(),
+                    type = header.type ?: "Playlist",
+                    artworkUrl = repo.artworkFor(header),
+                    trackIds = items.map { it.id }
+                )
+            )
+        }
+    }
+
+    /**
+     * The downloaded tracks of a collection, in order. Empty if the collection
+     * was never downloaded, so callers can fall back to the server.
+     */
+    fun collectionTracks(collectionId: String): List<SavedTrack> {
+        val collection = collectionsStore.byId(collectionId) ?: return emptyList()
+        val byId = _downloadedTracks.value.associateBy { it.id }
+        return collection.trackIds.mapNotNull(byId::get)
+    }
+
+    fun collectionById(collectionId: String): DownloadedCollection? =
+        collectionsStore.byId(collectionId)
+
+    /** Removes a downloaded collection and the tracks it brought down. */
+    fun removeCollection(collectionId: String) {
+        collectionsStore.byId(collectionId)?.trackIds?.forEach(::remove)
+        collectionsStore.remove(collectionId)
+    }
 
     fun remove(itemId: String) {
         DownloadService.sendRemoveDownload(
@@ -190,6 +235,9 @@ class DownloadsController @Inject constructor(
             }
             _states.value = states
             _downloadedTracks.value = tracks
+            // Tracks removed one by one should not leave a collection pointing
+            // at downloads that are gone.
+            collectionsStore.prune(tracks.map { it.id }.toSet())
         }
     }
 
@@ -210,6 +258,7 @@ class DownloadsController @Inject constructor(
     fun clearForSignOut() {
         removeAll()
         repo.clearCachedLyrics()
+        collectionsStore.clear()
         _states.value = emptyMap()
         _downloadedTracks.value = emptyList()
     }

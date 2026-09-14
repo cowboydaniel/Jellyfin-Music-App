@@ -139,10 +139,14 @@ class ActionsController @Inject constructor(
         }
     }
 
-    /** Downloads a whole album or playlist in one go. */
-    fun downloadAll(items: List<BaseItem>, label: String) {
+    /**
+     * Downloads a whole album or playlist in one go. [header] is the collection
+     * itself, which is recorded so it survives offline as a playlist rather
+     * than as loose tracks.
+     */
+    fun downloadAll(items: List<BaseItem>, label: String, header: BaseItem? = null) {
         if (items.isEmpty()) return
-        downloads.downloadAll(items)
+        downloads.downloadAll(items, header)
         _toast.value = "Downloading $label (${items.size} tracks)"
     }
 

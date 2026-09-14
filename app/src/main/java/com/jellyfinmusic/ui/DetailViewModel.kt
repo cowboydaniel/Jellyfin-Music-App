@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.jellyfinmusic.data.ActionsController
 import com.jellyfinmusic.data.JellyfinRepository
 import com.jellyfinmusic.data.PlaylistContext
+import com.jellyfinmusic.data.toBaseItem
 import com.jellyfinmusic.network.BaseItem
 import com.jellyfinmusic.playback.PlayerConnection
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -31,6 +32,7 @@ data class DetailUiState(
 class DetailViewModel @Inject constructor(
     private val repo: JellyfinRepository,
     private val player: PlayerConnection,
+    private val downloads: com.jellyfinmusic.data.DownloadsController,
     val actions: ActionsController
 ) : ViewModel() {
 
@@ -56,11 +58,38 @@ class DetailViewModel @Inject constructor(
         currentPlaylistId = albumId.takeIf { isPlaylist }
         reloadCurrent = { loadAlbum(albumId, isPlaylist) }
         load {
-            val header = repo.itemById(albumId)
-            val tracks = if (isPlaylist) repo.playlistTracks(albumId) else repo.tracksOfAlbum(albumId)
-            DetailUiState(header = header, tracks = tracks, isLoading = false)
+            runCatching {
+                val header = repo.itemById(albumId)
+                val tracks =
+                    if (isPlaylist) repo.playlistTracks(albumId) else repo.tracksOfAlbum(albumId)
+                DetailUiState(header = header, tracks = tracks, isLoading = false)
+            }.getOrElse { error ->
+                // A downloaded collection stays openable with no server, which
+                // is the whole point of having downloaded it.
+                offlineState(albumId) ?: throw error
+            }
         }
     }
+
+    /**
+     * The downloaded copy of a collection, if there is one. Playback runs from
+     * the saved tracks rather than the displayed ones, since those carry the
+     * artwork and stream key the cache was filled under.
+     */
+    private fun offlineState(collectionId: String): DetailUiState? {
+        val saved = downloads.collectionTracks(collectionId)
+        if (saved.isEmpty()) return null
+        val collection = downloads.collectionById(collectionId)
+        offlineTracks = saved
+        return DetailUiState(
+            header = collection?.toBaseItem(),
+            tracks = saved.map { it.toBaseItem() },
+            isLoading = false
+        )
+    }
+
+    /** Set while showing a collection served from downloads. */
+    private var offlineTracks: List<com.jellyfinmusic.data.SavedTrack> = emptyList()
 
     fun loadArtist(artistId: String) {
         currentPlaylistId = null
@@ -92,17 +121,21 @@ class DetailViewModel @Inject constructor(
     }
 
     fun play(index: Int) {
-        val tracks = _state.value.tracks
-        if (tracks.isEmpty()) return
-        player.playQueue(tracks.toPlayable(repo), index)
+        val queue = playableQueue()
+        if (queue.isEmpty()) return
+        player.playQueue(queue, index)
     }
 
     fun playAll(shuffle: Boolean) {
-        val tracks = _state.value.tracks
-        if (tracks.isEmpty()) return
-        val ordered = if (shuffle) tracks.shuffled() else tracks
-        player.playQueue(ordered.toPlayable(repo), 0)
+        val queue = playableQueue()
+        if (queue.isEmpty()) return
+        player.playQueue(if (shuffle) queue.shuffled() else queue, 0)
     }
+
+    /** Prefers the downloaded copies, so a collection plays with no server. */
+    private fun playableQueue() = offlineTracks.takeIf { it.isNotEmpty() }
+        ?.map(downloads::toPlayable)
+        ?: _state.value.tracks.toPlayable(repo)
 
     /** Queues the server's instant mix for this item — the "start radio" action. */
     fun startRadio() {
@@ -121,8 +154,9 @@ class DetailViewModel @Inject constructor(
     fun toggleFavorite(item: BaseItem) = actions.toggleFavorite(item)
 
     fun downloadAll() {
-        val label = _state.value.header?.name ?: "these tracks"
-        actions.downloadAll(_state.value.tracks, label)
+        val header = _state.value.header
+        val label = header?.name ?: "these tracks"
+        actions.downloadAll(_state.value.tracks, label, header)
     }
 
     fun deleteCurrentPlaylist(onDeleted: () -> Unit) {
@@ -135,6 +169,9 @@ class DetailViewModel @Inject constructor(
     fun imageUrl(item: BaseItem): String? = repo.artworkFor(item)
 
     private fun load(block: suspend () -> DetailUiState) {
+        // Cleared up front so a previous offline collection cannot supply the
+        // queue for whatever is loaded next.
+        offlineTracks = emptyList()
         _state.value = _state.value.copy(isLoading = true, error = null)
         viewModelScope.launch {
             runCatching { block() }

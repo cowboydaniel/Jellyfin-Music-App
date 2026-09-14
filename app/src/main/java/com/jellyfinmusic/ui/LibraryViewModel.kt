@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.jellyfinmusic.data.ActionsController
 import com.jellyfinmusic.data.JellyfinRepository
+import com.jellyfinmusic.data.toBaseItem
 import com.jellyfinmusic.network.BaseItem
 import com.jellyfinmusic.playback.PlayerConnection
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -105,9 +106,13 @@ class LibraryViewModel @Inject constructor(
                 when (tab) {
                     // Downloads are read from the local cache so the tab works
                     // with no server connection at all.
+                    // Downloaded playlists and albums lead, so they can be
+                    // opened as collections rather than hunted for among the
+                    // loose tracks they brought down.
                     LibraryTab.DOWNLOADS -> {
                         downloads.refresh()
-                        downloads.downloadedTracks.value.map { it.toBaseItem() }
+                        downloads.downloadedCollections.value.map { it.toBaseItem() } +
+                            downloads.downloadedTracks.value.map { it.toBaseItem() }
                     }
                     LibraryTab.PLAYLISTS -> repo.playlists(sort.key, sort.order)
                     LibraryTab.ALBUMS -> repo.allAlbums(sortBy = sort.key, sortOrder = sort.order)
@@ -144,9 +149,15 @@ class LibraryViewModel @Inject constructor(
 
     /** Plays the Songs tab as a queue starting from the tapped row. */
     fun playSongs(index: Int) {
-        val songs = _state.value.items
-        if (songs.isEmpty()) return
-        player.playQueue(songs.toPlayable(repo), index)
+        val items = _state.value.items
+        val tapped = items.getOrNull(index) ?: return
+        // The Downloads tab lists collections above the loose tracks, so the
+        // row index is not the queue index and the collections themselves must
+        // not end up in the queue.
+        val songs = items.filter { it.type != "Playlist" && it.type != "MusicAlbum" }
+        val start = songs.indexOfFirst { it.id == tapped.id }
+        if (start < 0) return
+        player.playQueue(songs.toPlayable(repo), start)
     }
 
     fun imageUrl(item: BaseItem): String? = repo.artworkFor(item)
@@ -156,15 +167,10 @@ class LibraryViewModel @Inject constructor(
         val items = _state.value.items
         if (items.isEmpty()) return
         if (_state.value.tab == LibraryTab.SONGS || _state.value.tab == LibraryTab.DOWNLOADS) {
-            player.playQueue(items.shuffled().toPlayable(repo), 0)
+            val songs = items.filter { it.type != "Playlist" && it.type != "MusicAlbum" }
+            if (songs.isEmpty()) return
+            player.playQueue(songs.shuffled().toPlayable(repo), 0)
         }
     }
 
-    private fun com.jellyfinmusic.data.SavedTrack.toBaseItem() = BaseItem(
-        id = id,
-        name = title,
-        type = "Audio",
-        albumArtist = artist,
-        album = album
-    )
 }
