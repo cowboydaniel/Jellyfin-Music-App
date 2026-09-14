@@ -478,6 +478,11 @@ class JellyfinRepository @Inject constructor(
                 "&api_key=${s.accessToken}" +
                 "&deviceId=jellyfin-music-android"
         }
+        // Containers listed here are the ones the client can play untouched, so
+        // the server direct-streams instead of transcoding. ExoPlayer handles
+        // Vorbis, Opus and FLAC inside an Ogg container, and .ogg files are
+        // variously reported as ogg, oga or vorbis depending on how they were
+        // tagged, so all three are claimed.
         return "${s.jellyfinUrl}Audio/$itemId/universal" +
             "?UserId=${s.userId}" +
             "&DeviceId=jellyfin-music-android" +
@@ -485,8 +490,24 @@ class JellyfinRepository @Inject constructor(
             "&TranscodingContainer=ts" +
             "&TranscodingProtocol=hls" +
             "&AudioCodec=aac" +
-            "&Container=opus,mp3,aac,m4a,flac,webma,webm,wav,ogg" +
+            "&Container=opus,ogg,oga,vorbis,mp3,aac,m4a,flac,alac,webma,webm,wav,aiff" +
             "&MaxStreamingBitrate=${quality.maxBitrate}"
+    }
+
+    /**
+     * URL used for offline downloads, which is always the original file.
+     *
+     * The streaming tiers can hand back an HLS playlist when the server decides
+     * to transcode, and a progressive download of a playlist fetches the text
+     * of the playlist rather than any audio. Downloading the original sidesteps
+     * that entirely, and a download is worth keeping at full quality anyway.
+     */
+    fun downloadUrl(itemId: String): String {
+        val s = settings.current
+        return "${s.jellyfinUrl}Audio/$itemId/stream" +
+            "?static=true" +
+            "&api_key=${s.accessToken}" +
+            "&deviceId=jellyfin-music-android"
     }
 
     fun imageUrl(itemId: String?, tag: String? = null, maxSize: Int = 512): String? {

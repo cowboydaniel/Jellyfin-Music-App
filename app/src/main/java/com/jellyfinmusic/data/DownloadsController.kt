@@ -123,7 +123,7 @@ class DownloadsController @Inject constructor(
      */
     fun download(item: BaseItem, smart: Boolean = false) {
         if (smart) smartDownloadIds.add(item.id)
-        val request = DownloadRequest.Builder(item.id, android.net.Uri.parse(repo.streamUrl(item.id)))
+        val request = DownloadRequest.Builder(item.id, android.net.Uri.parse(repo.downloadUrl(item.id)))
             .setData(
                 SavedTrack(
                     id = item.id,
