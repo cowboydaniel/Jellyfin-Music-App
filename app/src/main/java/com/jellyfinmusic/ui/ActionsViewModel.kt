@@ -22,4 +22,7 @@ class ActionsViewModel @Inject constructor(
     val dislikedIds = actions.dislikedIds
 
     fun imageUrl(item: BaseItem): String? = repo.artworkFor(item)
+
+    /** Cancels every download, running and queued. */
+    fun stopAllDownloads() = actions.stopAllDownloads()
 }

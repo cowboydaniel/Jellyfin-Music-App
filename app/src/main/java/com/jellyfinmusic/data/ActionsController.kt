@@ -129,6 +129,15 @@ class ActionsController @Inject constructor(
 
     fun downloadState(itemId: String) = downloads.stateOf(itemId)
 
+    /**
+     * Cancels every download still running or queued. Tracks already on disk
+     * stay downloaded -- this stops work, it does not delete anything.
+     */
+    fun stopAllDownloads() {
+        downloads.stopAll()
+        _toast.value = "Downloads stopped"
+    }
+
     fun toggleDownload(item: BaseItem) {
         if (downloads.stateOf(item.id) == DownloadState.NONE) {
             downloads.download(item)

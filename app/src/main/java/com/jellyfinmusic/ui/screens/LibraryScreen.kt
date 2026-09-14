@@ -72,6 +72,7 @@ fun LibraryScreen(
     var sortMenuOpen by remember { mutableStateOf(false) }
     val state by viewModel.state.collectAsStateWithLifecycle()
     val favorites by viewModel.favoriteIds.collectAsStateWithLifecycle()
+    val activeDownloads by viewModel.activeDownloadCount.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { viewModel.loadOnce() }
     var confirmDeleteSelected by androidx.compose.runtime.remember {
         androidx.compose.runtime.mutableStateOf(false)
@@ -159,6 +160,38 @@ fun LibraryScreen(
                     contentDescription = "Toggle layout",
                     tint = AppColors.Secondary
                 )
+            }
+        }
+
+        // Sits at the top of Downloads whenever anything is coming down, so
+        // stopping is always one tap from the tab the downloads live in.
+        if (state.tab == LibraryTab.DOWNLOADS && activeDownloads > 0) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+                    .background(AppColors.Surface)
+                    .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+            ) {
+                Text(
+                    "Downloading $activeDownloads track${if (activeDownloads == 1) "" else "s"}",
+                    color = AppColors.OnBackground,
+                    modifier = Modifier.weight(1f)
+                )
+                androidx.compose.material3.Button(
+                    onClick = viewModel::stopAllDownloads,
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = AppColors.Accent,
+                        contentColor = AppColors.Background
+                    )
+                ) {
+                    Text(
+                        "STOP ALL DOWNLOADS",
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                    )
+                }
             }
         }
 

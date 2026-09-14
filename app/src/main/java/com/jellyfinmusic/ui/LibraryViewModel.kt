@@ -11,6 +11,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -209,6 +211,16 @@ class LibraryViewModel @Inject constructor(
         return collections.map { it.toBaseItem() } +
             tracks.filterNot { it.id in inCollections }.map { it.toBaseItem() }
     }
+
+    /** How many tracks are downloading, for the stop button in Downloads. */
+    val activeDownloadCount: StateFlow<Int> = downloads.states
+        .map { states ->
+            states.count { it.value == com.jellyfinmusic.data.DownloadState.DOWNLOADING }
+        }
+        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, 0)
+
+    /** Cancels every download, running and queued. */
+    fun stopAllDownloads() = actions.stopAllDownloads()
 
     // ---- Selection --------------------------------------------------------
 

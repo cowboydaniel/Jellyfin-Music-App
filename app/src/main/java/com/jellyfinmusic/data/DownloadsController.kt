@@ -218,10 +218,31 @@ class DownloadsController @Inject constructor(
     }
 
     /**
-     * Cancels everything queued or in flight, whatever it belongs to. The way
-     * out when downloads are running that the user no longer wants.
+     * Cancels everything queued or in flight and keeps what already finished.
+     *
+     * This is a stop, not a purge: tracks already on disk stay downloaded and
+     * playable. Only the unfinished work is thrown away.
      */
-    fun stopAll() = removeAll()
+    fun stopAll() {
+        scope.launch {
+            val unfinished = withContext(Dispatchers.IO) {
+                val ids = mutableListOf<String>()
+                runCatching {
+                    downloadManager.downloadIndex.getDownloads().use { cursor ->
+                        while (cursor.moveToNext()) {
+                            val download = cursor.download
+                            if (download.state != Download.STATE_COMPLETED) {
+                                ids += download.request.id
+                            }
+                        }
+                    }
+                }
+                ids
+            }
+            // DownloadManager is bound to the thread it was built on.
+            withContext(Dispatchers.Main) { removeMany(unfinished) }
+        }
+    }
 
     /** Bytes currently held on disk by downloaded audio. */
     fun cacheSizeBytes(): Long = runCatching { cache.cacheSpace }.getOrDefault(0L)
