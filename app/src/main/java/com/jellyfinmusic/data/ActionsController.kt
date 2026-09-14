@@ -358,6 +358,8 @@ class ActionsController @Inject constructor(
     }
 
     fun deletePlaylist(playlistId: String, onDeleted: () -> Unit) {
+        // A deleted playlist should not keep downloading in the background.
+        downloads.removeCollection(playlistId)
         scope.launch {
             runCatching { repo.deletePlaylist(playlistId) }
                 .onSuccess {

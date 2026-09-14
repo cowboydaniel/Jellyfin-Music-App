@@ -185,26 +185,43 @@ class DownloadsController @Inject constructor(
 
     /** Removes a downloaded collection and the tracks it brought down. */
     fun removeCollection(collectionId: String) {
-        collectionsStore.byId(collectionId)?.trackIds?.forEach(::remove)
+        val tracks = collectionsStore.byId(collectionId)?.trackIds.orEmpty()
+        // Forgotten first, so the prune that follows the refresh cannot put it
+        // back from the tracks still winding down.
         collectionsStore.remove(collectionId)
+        removeMany(tracks)
     }
 
-    fun remove(itemId: String) {
-        DownloadService.sendRemoveDownload(
-            context,
-            MusicDownloadService::class.java,
-            itemId,
-            /* foreground = */ false
-        )
+    /**
+     * Removal goes straight to the DownloadManager rather than through a
+     * service intent. It is the same instance the service drives, and the
+     * intent round-trip could be dropped or arrive behind a queue of work --
+     * which left a cancelled download running with no way to stop it.
+     */
+    fun remove(itemId: String) = removeMany(listOf(itemId))
+
+    /** Removes a batch and refreshes once, rather than once per track. */
+    fun removeMany(itemIds: Collection<String>) {
+        if (itemIds.isEmpty()) return
+        itemIds.forEach { id ->
+            smartDownloadIds.remove(id)
+            runCatching { downloadManager.removeDownload(id) }
+        }
+        refresh()
     }
 
     fun removeAll() {
-        DownloadService.sendRemoveAllDownloads(
-            context,
-            MusicDownloadService::class.java,
-            /* foreground = */ false
-        )
+        smartDownloadIds.clear()
+        runCatching { downloadManager.removeAllDownloads() }
+        collectionsStore.clear()
+        refresh()
     }
+
+    /**
+     * Cancels everything queued or in flight, whatever it belongs to. The way
+     * out when downloads are running that the user no longer wants.
+     */
+    fun stopAll() = removeAll()
 
     /** Bytes currently held on disk by downloaded audio. */
     fun cacheSizeBytes(): Long = runCatching { cache.cacheSpace }.getOrDefault(0L)

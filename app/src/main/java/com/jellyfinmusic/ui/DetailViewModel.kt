@@ -176,8 +176,12 @@ class DetailViewModel @Inject constructor(
      */
     fun stopDownload() {
         val header = _state.value.header
-        _state.value.tracks.forEach { downloads.remove(it.id) }
+        // The recorded collection and the visible tracks can differ -- the list
+        // may have been reordered or edited since -- so both are cancelled.
+        val ids = _state.value.tracks.map { it.id } +
+            header?.id?.let { downloads.collectionById(it)?.trackIds }.orEmpty()
         header?.let { downloads.removeCollection(it.id) }
+        downloads.removeMany(ids.toSet())
         actions.notify("Download cancelled")
     }
 
