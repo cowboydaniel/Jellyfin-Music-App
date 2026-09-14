@@ -59,9 +59,16 @@ class DetailViewModel @Inject constructor(
         reloadCurrent = { loadAlbum(albumId, isPlaylist) }
         load {
             runCatching {
-                val header = repo.itemById(albumId)
                 val tracks =
                     if (isPlaylist) repo.playlistTracks(albumId) else repo.tracksOfAlbum(albumId)
+                // Falls back to a stub rather than null: the header is what
+                // identifies the collection when downloading, so losing it
+                // silently turns a playlist download into loose tracks.
+                val header = repo.itemById(albumId) ?: BaseItem(
+                    id = albumId,
+                    name = tracks.firstOrNull()?.album.takeIf { !isPlaylist } ?: "Playlist",
+                    type = if (isPlaylist) "Playlist" else "MusicAlbum"
+                )
                 DetailUiState(header = header, tracks = tracks, isLoading = false)
             }.getOrElse { error ->
                 // A downloaded collection stays openable with no server, which

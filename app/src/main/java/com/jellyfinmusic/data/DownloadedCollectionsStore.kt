@@ -64,6 +64,10 @@ class DownloadedCollectionsStore @Inject constructor(
      * playlist behind that plays silence.
      */
     fun prune(downloadedIds: Set<String>) {
+        // Queuing a download is asynchronous, so an empty index more often
+        // means "the service has not caught up" than "everything was deleted".
+        // Removing the last download is handled by removeCollection instead.
+        if (downloadedIds.isEmpty()) return
         val pruned = _collections.value
             .map { it.copy(trackIds = it.trackIds.filter { id -> id in downloadedIds }) }
             .filter { it.trackIds.isNotEmpty() }

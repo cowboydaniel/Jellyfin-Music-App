@@ -73,6 +73,21 @@ class LibraryViewModel @Inject constructor(
                 if (_state.value.tab == LibraryTab.PLAYLISTS) select(LibraryTab.PLAYLISTS)
             }
         }
+
+        // Downloads arrive in the background, long after the tab was opened, so
+        // the list follows the download state instead of sampling it once.
+        viewModelScope.launch {
+            kotlinx.coroutines.flow.combine(
+                downloads.downloadedCollections,
+                downloads.downloadedTracks
+            ) { collections, tracks ->
+                collections.map { it.toBaseItem() } + tracks.map { it.toBaseItem() }
+            }.collect { items ->
+                if (_state.value.tab == LibraryTab.DOWNLOADS) {
+                    _state.value = _state.value.copy(items = items, isLoading = false, error = null)
+                }
+            }
+        }
     }
 
     fun loadOnce() {
@@ -96,7 +111,7 @@ class LibraryViewModel @Inject constructor(
 
     fun select(tab: LibraryTab) {
         val sort = _state.value.sort
-        cache[tab to sort]?.let {
+        cache[tab to sort]?.takeIf { tab != LibraryTab.DOWNLOADS }?.let {
             _state.value = _state.value.copy(tab = tab, items = it, isLoading = false, error = null)
             return
         }
@@ -109,6 +124,8 @@ class LibraryViewModel @Inject constructor(
                     // Downloaded playlists and albums lead, so they can be
                     // opened as collections rather than hunted for among the
                     // loose tracks they brought down.
+                    // Only kicks the refresh; the collector above delivers the
+                    // result, here and again as later downloads land.
                     LibraryTab.DOWNLOADS -> {
                         downloads.refresh()
                         downloads.downloadedCollections.value.map { it.toBaseItem() } +
@@ -122,7 +139,9 @@ class LibraryViewModel @Inject constructor(
                 }
             }
                 .onSuccess {
-                    cache[tab to sort] = it
+                    // Downloads change under the tab, so caching it would
+                    // freeze whatever happened to be on disk at first open.
+                    if (tab != LibraryTab.DOWNLOADS) cache[tab to sort] = it
                     if (_state.value.tab == tab) {
                         _state.value = _state.value.copy(items = it, isLoading = false)
                     }
