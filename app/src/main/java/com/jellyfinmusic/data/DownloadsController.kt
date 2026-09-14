@@ -207,6 +207,9 @@ class DownloadsController @Inject constructor(
             smartDownloadIds.remove(id)
             runCatching { downloadManager.removeDownload(id) }
         }
+        // Collections follow what was actually removed, never what the index
+        // happens to know about at the time.
+        collectionsStore.removeTracks(itemIds.toSet())
         refresh()
     }
 
@@ -273,12 +276,6 @@ class DownloadsController @Inject constructor(
             }
             _states.value = states
             _downloadedTracks.value = tracks
-            // Tracks removed one by one should not leave a collection pointing
-            // at downloads that are gone. Pruned against everything the index
-            // knows rather than against completed tracks only -- a collection
-            // is recorded the moment it is queued, and pruning on completion
-            // would drop it again before the first track finished.
-            collectionsStore.prune(states.keys)
         }
     }
 

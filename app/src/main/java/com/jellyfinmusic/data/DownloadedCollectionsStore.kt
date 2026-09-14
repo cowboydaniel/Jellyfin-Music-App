@@ -59,17 +59,19 @@ class DownloadedCollectionsStore @Inject constructor(
         _collections.value.firstOrNull { it.id == collectionId }
 
     /**
-     * Drops tracks that are no longer downloaded, and forgets any collection
-     * left with nothing, so removing downloads individually cannot leave a
-     * playlist behind that plays silence.
+     * Drops tracks that were actually removed, and forgets any collection left
+     * with nothing.
+     *
+     * Only ever called with IDs that were explicitly removed. It must not infer
+     * removal from a track's absence in the download index: queuing a large
+     * playlist registers its tracks gradually, so a collection compared against
+     * the index mid-queue is truncated to whatever had registered by then, and
+     * everything after that completes as a loose track belonging to nothing.
      */
-    fun prune(downloadedIds: Set<String>) {
-        // Queuing a download is asynchronous, so an empty index more often
-        // means "the service has not caught up" than "everything was deleted".
-        // Removing the last download is handled by removeCollection instead.
-        if (downloadedIds.isEmpty()) return
+    fun removeTracks(removedIds: Set<String>) {
+        if (removedIds.isEmpty()) return
         val pruned = _collections.value
-            .map { it.copy(trackIds = it.trackIds.filter { id -> id in downloadedIds }) }
+            .map { it.copy(trackIds = it.trackIds.filterNot { id -> id in removedIds }) }
             .filter { it.trackIds.isNotEmpty() }
         if (pruned != _collections.value) write(pruned)
     }
