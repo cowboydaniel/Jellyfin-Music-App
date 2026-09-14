@@ -192,12 +192,54 @@ class DetailViewModel @Inject constructor(
 
     val isPlaylist: Boolean get() = currentPlaylistId != null
 
+    // ---- Selection --------------------------------------------------------
+
+    private val _selected = MutableStateFlow<Set<String>?>(null)
+
+    /** Null when not selecting; a set of track IDs once selection starts. */
+    val selected: StateFlow<Set<String>?> = _selected
+
+    /** Only playlists support removal, so only they can start a selection. */
+    fun startSelection(track: BaseItem) {
+        if (currentPlaylistId == null) return
+        _selected.value = setOf(track.id)
+    }
+
+    fun toggleSelected(track: BaseItem) {
+        val current = _selected.value ?: return
+        val updated = if (track.id in current) current - track.id else current + track.id
+        // Unticking the last row leaves selection mode.
+        _selected.value = updated.ifEmpty { null }
+    }
+
+    fun selectAll() {
+        if (currentPlaylistId == null) return
+        _selected.value = _state.value.tracks.map { it.id }.toSet()
+    }
+
+    fun clearSelection() {
+        _selected.value = null
+    }
+
+    /** Removes every ticked track from the playlist being shown. */
+    fun removeSelected() {
+        val playlistId = currentPlaylistId ?: return
+        val ids = _selected.value.orEmpty()
+        // Entry IDs, since the same track can appear in a playlist twice.
+        val entryIds = _state.value.tracks
+            .filter { it.id in ids }
+            .mapNotNull { it.playlistItemId }
+        _selected.value = null
+        actions.removeManyFromPlaylist(playlistId, entryIds)
+    }
+
     fun imageUrl(item: BaseItem): String? = repo.artworkFor(item)
 
     private fun load(block: suspend () -> DetailUiState) {
         // Cleared up front so a previous offline collection cannot supply the
         // queue for whatever is loaded next.
         offlineTracks = emptyList()
+        _selected.value = null
         _state.value = _state.value.copy(isLoading = true, error = null)
         viewModelScope.launch {
             runCatching { block() }

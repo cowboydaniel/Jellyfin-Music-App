@@ -77,6 +77,35 @@ fun AlbumDetailScreen(
     var confirmDelete by remember { mutableStateOf(false) }
     LaunchedEffect(albumId, isPlaylist) { viewModel.loadAlbum(albumId, isPlaylist) }
 
+    val selected by viewModel.selected.collectAsStateWithLifecycle()
+    var confirmRemoveSelected by remember { mutableStateOf(false) }
+
+    // Backing out should leave selection rather than the screen.
+    androidx.activity.compose.BackHandler(enabled = selected != null) {
+        viewModel.clearSelection()
+    }
+
+    if (confirmRemoveSelected) {
+        val count = selected.orEmpty().size
+        AlertDialog(
+            onDismissRequest = { confirmRemoveSelected = false },
+            title = { Text("Remove from playlist") },
+            text = {
+                Text("Remove $count track${if (count == 1) "" else "s"} from this playlist?")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmRemoveSelected = false
+                    viewModel.removeSelected()
+                }) { Text("Remove") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmRemoveSelected = false }) { Text("Cancel") }
+            },
+            containerColor = AppColors.Surface
+        )
+    }
+
     val downloadStates by viewModel.downloadStates.collectAsStateWithLifecycle()
     // Only a download still in flight offers a stop; a finished one does not.
     val downloadProgress = remember(downloadStates, state.tracks) {
@@ -105,11 +134,24 @@ fun AlbumDetailScreen(
         )
     }
 
+    androidx.compose.foundation.layout.Column(Modifier.fillMaxSize()) {
+    selected?.let { picked ->
+        SelectionBar(
+            count = picked.size,
+            total = state.tracks.size,
+            topPadding = contentPadding.calculateTopPadding(),
+            onSelectAll = viewModel::selectAll,
+            onClear = viewModel::clearSelection,
+            onRemove = { confirmRemoveSelected = true }
+        )
+    }
+
     StateBox(state.isLoading, state.error, false, "") {
         LazyColumn(
             Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
-                top = contentPadding.calculateTopPadding(),
+                // The selection bar already occupies the top inset.
+                top = if (selected == null) contentPadding.calculateTopPadding() else 0.dp,
                 bottom = contentPadding.calculateBottomPadding() + 24.dp
             )
         ) {
@@ -151,7 +193,16 @@ fun AlbumDetailScreen(
                         formatDuration(track.durationMs)
                     ).joinToString(" · "),
                     artworkUrl = viewModel.imageUrl(track),
-                    onClick = { viewModel.play(index) },
+                    onClick = {
+                        if (selected != null) viewModel.toggleSelected(track)
+                        else viewModel.play(index)
+                    },
+                    onLongClick = if (isPlaylist) {
+                        { viewModel.startSelection(track) }
+                    } else {
+                        null
+                    },
+                    isSelected = selected?.contains(track.id),
                     onMenuClick = { viewModel.showMenu(track) },
                     isFavorite = track.id in favorites,
                     onFavoriteClick = { viewModel.toggleFavorite(track) }
@@ -168,6 +219,50 @@ fun AlbumDetailScreen(
                     )
                 }
             }
+        }
+    }
+    }
+}
+
+/** Replaces nothing; sits above the list while playlist tracks are selected. */
+@Composable
+private fun SelectionBar(
+    count: Int,
+    total: Int,
+    topPadding: androidx.compose.ui.unit.Dp,
+    onSelectAll: () -> Unit,
+    onClear: () -> Unit,
+    onRemove: () -> Unit
+) {
+    androidx.compose.foundation.layout.Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(top = topPadding)
+            .padding(horizontal = 4.dp, vertical = 4.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+    ) {
+        androidx.compose.material3.IconButton(onClick = onClear) {
+            Icon(
+                Icons.Filled.Close,
+                contentDescription = "Cancel selection",
+                tint = AppColors.OnBackground
+            )
+        }
+        Text(
+            "$count selected",
+            style = MaterialTheme.typography.titleMedium,
+            color = AppColors.OnBackground,
+            modifier = Modifier.weight(1f)
+        )
+        TextButton(onClick = onSelectAll) {
+            Text(if (count == total) "All selected" else "Select all", color = AppColors.Accent)
+        }
+        androidx.compose.material3.IconButton(onClick = onRemove, enabled = count > 0) {
+            Icon(
+                Icons.Filled.Delete,
+                contentDescription = "Remove selected from playlist",
+                tint = if (count > 0) AppColors.OnBackground else AppColors.Secondary
+            )
         }
     }
 }

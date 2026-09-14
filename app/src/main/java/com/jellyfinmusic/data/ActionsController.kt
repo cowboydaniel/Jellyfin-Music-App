@@ -366,6 +366,28 @@ class ActionsController @Inject constructor(
         }
     }
 
+    /**
+     * Removes several tracks from a playlist in one request.
+     *
+     * [entryIds] are PlaylistItemIds, not track IDs -- the same track can
+     * appear twice in a playlist, and only the entry ID says which one.
+     */
+    fun removeManyFromPlaylist(playlistId: String, entryIds: List<String>) {
+        if (entryIds.isEmpty()) return
+        scope.launch {
+            runCatching { repo.removeFromPlaylist(playlistId, entryIds) }
+                .onSuccess {
+                    _toast.value = if (entryIds.size == 1) {
+                        "Removed from playlist"
+                    } else {
+                        "Removed ${entryIds.size} tracks"
+                    }
+                    _playlistRevision.value++
+                }
+                .onFailure { _toast.value = it.message ?: "Could not remove from playlist" }
+        }
+    }
+
     fun deletePlaylist(playlistId: String, onDeleted: () -> Unit) {
         // A deleted playlist should not keep downloading in the background.
         downloads.removeCollection(playlistId)
