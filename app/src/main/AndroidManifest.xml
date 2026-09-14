@@ -67,6 +67,14 @@
         </receiver>
 
         <receiver
+            android:name=".playback.DownloadCommandReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.jellyfinmusic.STOP_ALL_DOWNLOADS" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
             android:name=".widget.WidgetCommandReceiver"
             android:exported="false">
             <intent-filter>

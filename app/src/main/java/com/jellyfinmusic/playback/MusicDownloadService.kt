@@ -1,6 +1,8 @@
 package com.jellyfinmusic.playback
 
 import android.app.Notification
+import android.content.Intent
+import androidx.core.app.NotificationCompat
 import androidx.media3.common.util.NotificationUtil
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.offline.Download
@@ -37,17 +39,46 @@ class MusicDownloadService : DownloadService(
 
     override fun getScheduler(): Scheduler? = null
 
+    /**
+     * The progress notification media3 builds, plus a STOP action.
+     *
+     * Without it the only way to call off a large download is to find the
+     * collection it came from, which is no use once several are queued -- so
+     * the action cancels everything, running and queued alike.
+     */
     override fun getForegroundNotification(
         downloads: List<Download>,
         notMetRequirements: Int
-    ): Notification = notificationHelper.buildProgressNotification(
-        this,
-        android.R.drawable.stat_sys_download,
-        null,
-        null,
-        downloads,
-        notMetRequirements
-    )
+    ): Notification {
+        val base = notificationHelper.buildProgressNotification(
+            this,
+            android.R.drawable.stat_sys_download,
+            null,
+            null,
+            downloads,
+            notMetRequirements
+        )
+        val stopIntent = android.app.PendingIntent.getBroadcast(
+            this,
+            0,
+            Intent(this, DownloadCommandReceiver::class.java)
+                .setAction(DownloadCommandReceiver.ACTION_STOP_ALL),
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or
+                android.app.PendingIntent.FLAG_IMMUTABLE
+        )
+        // Recovered from the built notification rather than rebuilt from
+        // scratch, so media3 keeps owning the progress text and bar.
+        return NotificationCompat.Builder(this, base)
+            .setSmallIcon(android.R.drawable.stat_sys_download)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .addAction(
+                android.R.drawable.ic_menu_close_clear_cancel,
+                "STOP ALL DOWNLOADS",
+                stopIntent
+            )
+            .build()
+    }
 
     companion object {
         const val CHANNEL_ID = "downloads"
